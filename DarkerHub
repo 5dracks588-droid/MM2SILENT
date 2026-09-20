@@ -1871,6 +1871,172 @@ PerformanceTab:Toggle({
     end
 })
 
+---------------------------------------------------------------------------
+-- [ SISTEMA DE SHOW FPS E PING NA TELA (ESTILO BOTÃO GIRATÓRIO) ]
+---------------------------------------------------------------------------
+local FpsGui = nil
+local PingGui = nil
+
+local function ToggleFpsGui(enable)
+    if enable then
+        if FpsGui then FpsGui:Destroy() end
+
+        local ScreenGui = Instance.new("ScreenGui")
+        ScreenGui.Name = "ShowFpsGui"
+        ScreenGui.ResetOnSpawn = false
+        ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+        local FpsLabel = Instance.new("TextLabel")
+        FpsLabel.Name = "FpsLabel"
+        FpsLabel.Size = UDim2.new(0, 90, 0, 35)
+        FpsLabel.Position = UDim2.new(0.85, 0, 0.01, 0) -- Movido um pouco mais para cima na tela
+        FpsLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        FpsLabel.BackgroundTransparency = 0.5
+        FpsLabel.Text = "FPS 0"
+        FpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Fixo na cor branca
+        FpsLabel.TextSize = 16
+        FpsLabel.Font = Enum.Font.SourceSans
+        FpsLabel.Parent = ScreenGui
+
+        local UICorner = Instance.new("UICorner")
+        UICorner.CornerRadius = UDim.new(0, 5)
+        UICorner.Parent = FpsLabel
+
+        local UIStroke = Instance.new("UIStroke")
+        UIStroke.Thickness = 2
+        UIStroke.Color = Color3.fromRGB(255, 255, 255)
+        UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        UIStroke.Parent = FpsLabel
+
+        local StrokeGradient = Instance.new("UIGradient")
+        StrokeGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 150, 150)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
+        })
+        StrokeGradient.Parent = UIStroke
+
+        local frames = 0
+        local lastUpdate = tick()
+
+        task.spawn(function()
+            local rot = 0
+            while FpsLabel.Parent do
+                -- Animação giratória da borda
+                rot = (rot + 3) % 360
+                if StrokeGradient.Parent then
+                    StrokeGradient.Rotation = rot
+                end
+                
+                -- Sistema do FPS atualizando a cada 1 segundo (Sempre branco)
+                frames = frames + 1
+                if tick() - lastUpdate >= 1 then
+                    FpsLabel.Text = "FPS " .. frames
+                    frames = 0
+                    lastUpdate = tick()
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+
+        FpsGui = ScreenGui
+    else
+        if FpsGui then
+            FpsGui:Destroy()
+            FpsGui = nil
+        end
+    end
+end
+
+local function TogglePingGui(enable)
+    if enable then
+        if PingGui then PingGui:Destroy() end
+
+        local ScreenGui = Instance.new("ScreenGui")
+        ScreenGui.Name = "ShowPingGui"
+        ScreenGui.ResetOnSpawn = false
+        ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+        local PingLabel = Instance.new("TextLabel")
+        PingLabel.Name = "PingLabel"
+        PingLabel.Size = UDim2.new(0, 90, 0, 35)
+        -- Altura de 35 do FPS + 3 pixels de separação = 38
+        PingLabel.Position = UDim2.new(0.85, 0, 0.03, 38) 
+        PingLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        PingLabel.BackgroundTransparency = 0.5
+        PingLabel.Text = "Ping 0"
+        PingLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Fixo na cor branca
+        PingLabel.TextSize = 16
+        PingLabel.Font = Enum.Font.SourceSans
+        PingLabel.Parent = ScreenGui
+
+        local UICorner = Instance.new("UICorner")
+        UICorner.CornerRadius = UDim.new(0, 5)
+        UICorner.Parent = PingLabel
+
+        local UIStroke = Instance.new("UIStroke")
+        UIStroke.Thickness = 2
+        UIStroke.Color = Color3.fromRGB(255, 255, 255)
+        UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        UIStroke.Parent = PingLabel
+
+        local StrokeGradient = Instance.new("UIGradient")
+        StrokeGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 150, 150)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
+        })
+        StrokeGradient.Parent = UIStroke
+
+        local lastUpdate = tick()
+
+        task.spawn(function()
+            local rot = 0
+            while PingLabel.Parent do
+                -- Animação giratória da borda
+                rot = (rot + 3) % 360
+                if StrokeGradient.Parent then
+                    StrokeGradient.Rotation = rot
+                end
+                
+                -- Sistema do Ping atualizando a cada 1 segundo (Sempre branco)
+                if tick() - lastUpdate >= 1 then
+                    local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+                    PingLabel.Text = "Ping " .. ping
+                    lastUpdate = tick()
+                end
+                RunService.Heartbeat:Wait()
+            end
+        end)
+
+        PingGui = ScreenGui
+    else
+        if PingGui then
+            PingGui:Destroy()
+            PingGui = nil
+        end
+    end
+end
+
+-- ADICIONANDO AS OPÇÕES NA TAB INFO
+InfoTab:Toggle({
+    Title = "Show FPS",
+    Default = false,
+    Callback = function(v)
+        ToggleFpsGui(v)
+    end
+})
+
+InfoTab:Toggle({
+    Title = "Show Ping",
+    Default = false,
+    Callback = function(v)
+        TogglePingGui(v)
+    end
+})
+
 -- ==========================================
 -- GHOST MODE (MAPA OTIMIZADO + SYNC INSTANTÂNEO + AUTO-DESATIVAR AO MORRER)
 -- ==========================================
