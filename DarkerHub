@@ -524,106 +524,96 @@ local function ToggleShootButtonGui(enable)
         end)
 
         ---------------------------------------------------------------------------
-        -- [ DISPARO COM PREVISÃO DE MOVIMENTO E DESEQUIPE AUTOMÁTICO ]
-        ---------------------------------------------------------------------------
-        ShootButton.MouseButton1Down:Connect(function()
-            local Character = LocalPlayer.Character
-            local Backpack = LocalPlayer:FindFirstChild("Backpack")
-            if not Character or not Backpack then return end
+-- [ DISPARO PROJETADO COM AJUSTE DE TRAJETÓRIA E DESEQUIPE PRECOCE ]
+---------------------------------------------------------------------------
+ShootButton.MouseButton1Down:Connect(function()
+    local Character = LocalPlayer.Character
+    local Backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not Character or not Backpack then return end
 
-            local gunInBackpack = Backpack:FindFirstChild("Gun")
-            local gunInChar = Character:FindFirstChild("Gun")
-            local gun = gunInChar or gunInBackpack
+    local gunInBackpack = Backpack:FindFirstChild("Gun")
+    local gunInChar = Character:FindFirstChild("Gun")
+    local gun = gunInChar or gunInBackpack
 
-            if gun then
-                -- Equipa a arma automaticamente se estiver na mochila
-                if gun.Parent == Backpack then
-                    gun.Parent = Character
+    if gun then
+        -- 1. CONTROLE DE TEMPO DO DESEQUIPE (Começa a contar no momento em que equipa)
+        if gun.Parent == Backpack then
+            gun.Parent = Character
+            
+            -- Cronômetro rigoroso: 50 milissegundos após equipar, a arma é guardada
+            task.delay(0.05, function()
+                if gun and gun.Parent == Character then
+                    gun.Parent = Backpack
                 end
+            end)
+        else
+            -- Se a arma já estava na mão por algum motivo, guarda 50ms após o clique
+            task.delay(0.05, function()
+                if gun and gun.Parent == Character then
+                    gun.Parent = Backpack
+                end
+            end)
+        end
 
-                task.wait(0.005)
+        -- Pequeno tempo para o Roblox processar o nó da ferramenta na mão (0.005s solicitado)
+        task.wait(0.005)
 
-                local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
-                if not murderer or not murderer.Character then return end
+        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+        if not murderer or not murderer.Character then return end
 
-                local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
-                    or murderer.Character:FindFirstChild("UpperTorso") 
-                    or murderer.Character:FindFirstChild("Torso")
-                local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
-                local myRoot = Character:FindFirstChild("HumanoidRootPart")
+        local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
+            or murderer.Character:FindFirstChild("UpperTorso") 
+            or murderer.Character:FindFirstChild("Torso")
+        local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
+        local myRoot = Character:FindFirstChild("HumanoidRootPart")
+        
+        if targetPart and humanoid and humanoid.Health > 0 and myRoot then
+            local shootEvent = gun:FindFirstChild("Shoot")
+            
+            if shootEvent and shootEvent:IsA("RemoteEvent") then
+                -- 2. ORIGEM REAL: O tiro nasce obrigatoriamente de VOCÊ (Sua HumanoidRootPart)
+                local originPos = myRoot.Position
+                local targetPos = targetPart.Position
                 
-                if targetPart and humanoid and humanoid.Health > 0 and myRoot then
-                    local shootEvent = gun:FindFirstChild("Shoot")
-                    
-                    if shootEvent and shootEvent:IsA("RemoteEvent") then
-                        local targetPos = targetPart.Position
-                        local myPos = myRoot.Position
-                        
-                        -- Cria o Raycast para checar se tem blocos no caminho
-                        local rayDirection = targetPos - myPos
-                        local rayParams = RaycastParams.new()
-                        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                        rayParams.FilterDescendantsInstances = {Character} -- Ignora a nós mesmos no raio
-                        
-                        local rayResult = workspace:Raycast(myPos, rayDirection, rayParams)
-                        local caminhoLivre = false
-                        
-                        -- Verifica se o raio atingiu o Murderer ou se não bateu em nada
-                        if rayResult then
-                            if rayResult.Instance:IsDescendantOf(murderer.Character) then
-                                caminhoLivre = true
-                            end
-                        else
-                            caminhoLivre = true
-                        end
-                        
-                        if caminhoLivre then
-                            -- KILL AURA MELHORADA (Acompanha o movimento do alvo)
-                            local velocity = targetPart.AssemblyLinearVelocity
-                            local direction
-                            
-                            -- Verifica se ele está se movendo (velocidade maior que 2)
-                            if velocity.Magnitude > 2 then
-                                direction = velocity.Unit 
-                            else
-                                direction = targetPart.CFrame.LookVector 
-                            end
-                            
-                            -- O tiro nasce 4 pinos atrás da direção do movimento e vai 10 pinos para frente
-                            local originPos = targetPos - (direction * 4)
-                            local targetFinalPos = targetPos + (direction * 10)
-                            
-                            local fakeOrigin = CFrame.new(originPos)
-                            local fakeTarget = CFrame.new(targetFinalPos)
-                            
-                            shootEvent:FireServer(fakeOrigin, fakeTarget)
-                        else
-                            -- TIRO NORMAL (Murderer atrás de um bloco)
-                            local realOrigin = CFrame.new(myPos)
-                            local realTarget = CFrame.new(targetPos)
-                            
-                            shootEvent:FireServer(realOrigin, realTarget)
-                        end
-
-                        -- Desequipa a arma após 50 milissegundos (0.05 segundos)
-                        task.spawn(function()
-                            task.wait(0.05)
-                            if gun and gun.Parent == Character then
-                                gun.Parent = Backpack
-                            end
-                        end)
-
-                        -- Corta a animação de tiro para não bugar o personagem
-                        task.spawn(function()
-                            for i = 1, 5 do
-                                PararAnimacoesDeTiro(Character)
-                                game:GetService("RunService").Heartbeat:Wait()
-                            end
-                        end)
-                    end
+                -- Velocidade padrão calibrada do projétil do MM2 para o cálculo vetorial
+                local bulletSpeed = 250
+                local distance = (targetPos - originPos).Magnitude
+                
+                -- Puxa as latências físicas de rede atuais
+                local rawPing = LocalPlayer:GetNetworkPing()
+                local ping = (rawPing > 0) and rawPing or 0.05
+                
+                -- Tempo total estimado que a física do servidor leva para cruzar a distância
+                local travelTime = (distance / bulletSpeed) + ping
+                
+                -- 3. CORRETOR DE TRAJETÓRIA DINÂMICO
+                -- Em vez de atirar onde ele está, ajusta o vetor no ar baseando-se na direção de movimento
+                local velocity = targetPart.AssemblyLinearVelocity
+                local correctedTargetPos = targetPos
+                
+                -- Aplica a correção de interceptação apenas se o alvo estiver efetivamente correndo ou pulando
+                if velocity.Magnitude > 1.5 and velocity.Magnitude < 100 then
+                    correctedTargetPos = targetPos + (velocity * travelTime)
                 end
+                
+                -- Monta os CFrames finais gerados a partir do seu corpo em direção ao alvo recalculado
+                local realOrigin = CFrame.new(originPos, correctedTargetPos)
+                local realTarget = CFrame.new(correctedTargetPos)
+                
+                -- Envia a trajetória corrigida nativamente do seu ponto de origem
+                shootEvent:FireServer(realOrigin, realTarget)
+
+                -- 4. INTERCEPTADOR VISUAL DE ANIMAÇÃO
+                task.spawn(function()
+                    for i = 1, 5 do
+                        PararAnimacoesDeTiro(Character)
+                        game:GetService("RunService").Heartbeat:Wait()
+                    end
+                end)
             end
-        end)
+        end
+    end
+end)
 
         ShootButtonGui = ScreenGui
     else
