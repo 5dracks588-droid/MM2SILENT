@@ -76,6 +76,7 @@ local FovSize = 100
 
 -- Variáveis Kill Aura
 local KillAuraEnabled = false
+local KillAuraSheriffOnly = false
 local KillAuraDistance = math.huge
 local ThrowKnifeEnabled = false
 
@@ -116,6 +117,18 @@ getgenv().FPDH = workspace.FallenPartsDestroyHeight
 -- VARIÁVEIS DO SHOOT BUTTON / SILENT AIM
 local activeSilentAim = false
 local cachedTargetCFrame = nil
+
+-- ESTADOS E CONTROLES DE TAMANHO/ARRASTO DOS BOTÕES
+local ThrowBtnSize = UDim2.new(0, 150, 0, 70)
+local ThrowBtnPos = UDim2.new(0.75, 0, 0.35, -20)
+local ThrowResizeActive = false
+local ThrowDragActive = false
+local ThrowButtonGui = nil
+
+local ShootBtnSize = UDim2.new(0, 150, 0, 70)
+local ShootBtnPos = UDim2.new(0.75, 0, 0.5, 5)
+local ShootResizeActive = false
+local ShootDragActive = false
 local ShootButtonGui = nil
 
 -- FOV Seguro
@@ -140,6 +153,8 @@ WindUI:SetTheme("Dark")
 -- TABS
 local InfoTab = Window:Tab({Title = "Info", Icon = "house"})
 local CombatTab = Window:Tab({Title = "Combate", Icon = "sword"})
+local MurdererTab = Window:Tab({Title = "Murderer", Icon = "skull"})
+local SheriffTab = Window:Tab({Title = "Sheriff", Icon = "shield"})
 local FlingTab = Window:Tab({Title = "Fling", Icon = "wind"})
 local EspTab = Window:Tab({Title = "Visual", Icon = "eye"})
 local TeleportTab = Window:Tab({Title = "Teleportes", Icon = "map-pinned"})
@@ -234,39 +249,42 @@ local function GetMurdererPlayer()
 end
 
 ---------------------------------------------------------------------------
--- [ LOOP DA KILL AURA (Mecanismo Original) ]
+-- [ LOOP DA KILL AURA ]
 ---------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(0.05) do
-        -- Só executa se a Kill Aura estiver ativada, jogador existir e a classe for Murderer
-        if KillAuraEnabled and GetPlayerRole(LocalPlayer) == "Murderer" and LocalPlayer.Character then
+        if (KillAuraEnabled or KillAuraSheriffOnly) and GetPlayerRole(LocalPlayer) == "Murderer" and LocalPlayer.Character then
             
             local myHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             local equippedTool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
             local handle = equippedTool and equippedTool:FindFirstChild("Handle")
 
             if equippedTool and handle and myHRP then
-                
-                -- Varre todos os jogadores do servidor
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= LocalPlayer and IsParticipatingAndAlive(p) then
-                        local pChar = p.Character
-                        
-                        if pChar and pChar:FindFirstChild("HumanoidRootPart") and pChar:FindFirstChild("Humanoid") then
-                            local targetHRP = pChar.HumanoidRootPart
-                            local targetHum = pChar.Humanoid
-                            
-                            -- Se o alvo estiver vivo
-                            if targetHum.Health > 0 then
+                        local targetRole = GetPlayerRole(p)
+                        local shouldAttack = false
+
+                        if KillAuraEnabled then
+                            shouldAttack = true
+                        elseif KillAuraSheriffOnly and targetRole == "Sheriff" then
+                            shouldAttack = true
+                        end
+
+                        if shouldAttack then
+                            local pChar = p.Character
+                            if pChar and pChar:FindFirstChild("HumanoidRootPart") and pChar:FindFirstChild("Humanoid") then
+                                local targetHRP = pChar.HumanoidRootPart
+                                local targetHum = pChar.Humanoid
                                 
-                                local distance = (myHRP.Position - targetHRP.Position).Magnitude
-                                
-                                if distance <= KillAuraDistance then
-                                    pcall(function()
-                                        -- Simula o toque da faca no jogador
-                                        firetouchinterest(handle, targetHRP, 0)
-                                        firetouchinterest(handle, targetHRP, 1)
-                                    end)
+                                if targetHum.Health > 0 then
+                                    local distance = (myHRP.Position - targetHRP.Position).Magnitude
+                                    if distance <= KillAuraDistance then
+                                        pcall(function()
+                                            firetouchinterest(handle, targetHRP, 0)
+                                            firetouchinterest(handle, targetHRP, 1)
+                                        end)
+                                    end
                                 end
                             end
                         end
@@ -341,8 +359,6 @@ pcall(function()
     setreadonly(mt, true)
 end)
 
-local ThrowButtonGui = nil
-
 -- Função auxiliar para encontrar o jogador vivo mais próximo
 local function GetClosestPlayer()
     local closestPlayer = nil
@@ -366,6 +382,83 @@ local function GetClosestPlayer()
     return closestPlayer
 end
 
+---------------------------------------------------------------------------
+-- [ ATUALIZAÇÕES DOS BOTÕES (REDIMENSIONAR / ARRASTAR) ]
+---------------------------------------------------------------------------
+local function UpdateThrowButtonState()
+    if not ThrowButtonGui or not ThrowButtonGui:FindFirstChild("ThrowButton") then return end
+    local ThrowButton = ThrowButtonGui.ThrowButton
+    
+    ThrowButton.Size = ThrowBtnSize
+    ThrowButton.Position = ThrowBtnPos
+    
+    local outline = ThrowButton:FindFirstChild("ResizeOutline")
+    if ThrowResizeActive then
+        if not outline then
+            outline = Instance.new("UIStroke")
+            outline.Name = "ResizeOutline"
+            outline.Thickness = 2
+            outline.Color = Color3.fromRGB(0, 0, 0)
+            outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            outline.Parent = ThrowButton
+        end
+    else
+        if outline then outline:Destroy() end
+    end
+    
+    local handle = ThrowButton:FindFirstChild("ResizeHandle")
+    if ThrowResizeActive then
+        if not handle then
+            handle = Instance.new("TextButton")
+            handle.Name = "ResizeHandle"
+            handle.Size = UDim2.new(0, 18, 0, 18)
+            handle.Position = UDim2.new(1, 0, 1, 0)
+            handle.AnchorPoint = Vector2.new(0.5, 0.5)
+            handle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            handle.Text = "+"
+            handle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            handle.TextSize = 14
+            handle.Font = Enum.Font.SourceSansBold
+            handle.Parent = ThrowButton
+            
+            local hCorner = Instance.new("UICorner")
+            hCorner.CornerRadius = UDim.new(0, 4)
+            hCorner.Parent = handle
+
+            local draggingResize = false
+            local resizeStartMouse = Vector2.zero
+            handle.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    draggingResize = true
+                    resizeStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+                    local resizeStartSize = Vector2.new(ThrowButton.AbsoluteSize.X, ThrowButton.AbsoluteSize.Y)
+                    
+                    local conn, endConn
+                    conn = UserInputService.InputChanged:Connect(function(moveInput)
+                        if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingResize then
+                            local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - resizeStartMouse
+                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 5, 200)
+                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 5, 200)
+                            ThrowBtnSize = UDim2.new(0, newW, 0, newH)
+                            ThrowButton.Size = ThrowBtnSize
+                        end
+                    end)
+                    
+                    endConn = UserInputService.InputEnded:Connect(function(endInput)
+                        if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
+                            draggingResize = false
+                            if conn then conn:Disconnect() end
+                            if endConn then endConn:Disconnect() end
+                        end
+                    end)
+                end
+            end)
+        end
+    else
+        if handle then handle:Destroy() end
+    end
+end
+
 local function ToggleThrowButtonGui(enable)
     if enable then
         if ThrowButtonGui then ThrowButtonGui:Destroy() end
@@ -378,13 +471,13 @@ local function ToggleThrowButtonGui(enable)
 
         local ThrowButton = Instance.new("TextButton")
         ThrowButton.Name = "ThrowButton"
-        ThrowButton.Size = UDim2.new(0, 150, 0, 70)
-        ThrowButton.Position = UDim2.new(0.75, 0, 0.35, -20)
+        ThrowButton.Size = ThrowBtnSize
+        ThrowButton.Position = ThrowBtnPos
         ThrowButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         ThrowButton.BackgroundTransparency = 0.5
         ThrowButton.Text = "THROW KNIFE"
         ThrowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ThrowButton.TextSize = 18
+        ThrowButton.TextSize = 14
         ThrowButton.Font = Enum.Font.SourceSans
         ThrowButton.Active = true
         ThrowButton.Draggable = false
@@ -420,44 +513,69 @@ local function ToggleThrowButtonGui(enable)
             end
         end)
 
+        local draggingPos = false
+        local dragStartMouse = Vector2.zero
+        local dragStartPos = UDim2.new()
+
+        ThrowButton.InputBegan:Connect(function(input)
+            if ThrowDragActive and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                draggingPos = true
+                dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+                dragStartPos = ThrowButton.Position
+                
+                local conn, endConn
+                conn = UserInputService.InputChanged:Connect(function(moveInput)
+                    if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingPos then
+                        local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - dragStartMouse
+                        ThrowBtnPos = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+                        ThrowButton.Position = ThrowBtnPos
+                    end
+                end)
+                
+                endConn = UserInputService.InputEnded:Connect(function(endInput)
+                    if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
+                        draggingPos = false
+                        if conn then conn:Disconnect() end
+                        if endConn then endConn:Disconnect() end
+                    end
+                end)
+            end
+        end)
+
         ThrowButton.MouseButton1Down:Connect(function()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
+            if ThrowDragActive then return end
+            pcall(function()
+                local char = LocalPlayer.Character
+                if not char then return end
 
-        -- Garante que a faca existe
-        local knife = char:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
-        if not knife then return end
+                local knife = char:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
+                if not knife then return end
 
-        -- Equipa a faca (o servidor rejeita o RemoteEvent se ela estiver na mochila)
-        if knife.Parent == LocalPlayer.Backpack then
-            knife.Parent = char
-            task.wait(0.05)
-        end
+                if knife.Parent == LocalPlayer.Backpack then
+                    knife.Parent = char
+                    task.wait(0.05)
+                end
 
-        local events = knife:FindFirstChild("Events")
-        local knifeThrown = events and events:FindFirstChild("KnifeThrown")
-        if not knifeThrown then return end
+                local events = knife:FindFirstChild("Events")
+                local knifeThrown = events and events:FindFirstChild("KnifeThrown")
+                if not knifeThrown then return end
 
-        -- Busca o jogador mais próximo
-        local targetPlayer = GetClosestPlayer()
-        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-            local handle = knife:FindFirstChild("Handle")
-            local originPos = handle and handle.Position or char.HumanoidRootPart.Position
+                local targetPlayer = GetClosestPlayer()
+                if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+                    local handle = knife:FindFirstChild("Handle")
+                    local originPos = handle and handle.Position or char.HumanoidRootPart.Position
 
-            -- Argumento 1: Origem olhando para o alvo
-            local throwCFrame = CFrame.lookAt(originPos, targetPos)
-            -- Argumento 2: Posição do alvo
-            local targetCFrame = CFrame.new(targetPos)
+                    local throwCFrame = CFrame.lookAt(originPos, targetPos)
+                    local targetCFrame = CFrame.new(targetPos)
 
-            -- Disparo direto do RemoteEvent
-            knifeThrown:FireServer(throwCFrame, targetCFrame)
-        end
-    end)
-end)
+                    knifeThrown:FireServer(throwCFrame, targetCFrame)
+                end
+            end)
+        end)
 
         ThrowButtonGui = ScreenGui
+        UpdateThrowButtonState()
     else
         if ThrowButtonGui then
             ThrowButtonGui:Destroy()
@@ -469,6 +587,80 @@ end
 ---------------------------------------------------------------------------
 -- [ CRIANDO / DESTRUINDO O BOTÃO SHOOT ]
 ---------------------------------------------------------------------------
+local function UpdateShootButtonState()
+    if not ShootButtonGui or not ShootButtonGui:FindFirstChild("ShootButton") then return end
+    local ShootButton = ShootButtonGui.ShootButton
+    
+    ShootButton.Size = ShootBtnSize
+    ShootButton.Position = ShootBtnPos
+    
+    local outline = ShootButton:FindFirstChild("ResizeOutline")
+    if ShootResizeActive then
+        if not outline then
+            outline = Instance.new("UIStroke")
+            outline.Name = "ResizeOutline"
+            outline.Thickness = 2
+            outline.Color = Color3.fromRGB(0, 0, 0)
+            outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            outline.Parent = ShootButton
+        end
+    else
+        if outline then outline:Destroy() end
+    end
+    
+    local handle = ShootButton:FindFirstChild("ResizeHandle")
+    if ShootResizeActive then
+        if not handle then
+            handle = Instance.new("TextButton")
+            handle.Name = "ResizeHandle"
+            handle.Size = UDim2.new(0, 18, 0, 18)
+            handle.Position = UDim2.new(1, 0, 1, 0)
+            handle.AnchorPoint = Vector2.new(0.5, 0.5)
+            handle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            handle.Text = "+"
+            handle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            handle.TextSize = 14
+            handle.Font = Enum.Font.SourceSansBold
+            handle.Parent = ShootButton
+            
+            local hCorner = Instance.new("UICorner")
+            hCorner.CornerRadius = UDim.new(0, 4)
+            hCorner.Parent = handle
+
+            local draggingResize = false
+            local resizeStartMouse = Vector2.zero
+            handle.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    draggingResize = true
+                    resizeStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+                    local resizeStartSize = Vector2.new(ShootButton.AbsoluteSize.X, ShootButton.AbsoluteSize.Y)
+                    
+                    local conn, endConn
+                    conn = UserInputService.InputChanged:Connect(function(moveInput)
+                        if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingResize then
+                            local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - resizeStartMouse
+                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 5, 500)
+                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 5, 500)
+                            ShootBtnSize = UDim2.new(0, newW, 0, newH)
+                            ShootButton.Size = ShootBtnSize
+                        end
+                    end)
+                    
+                    endConn = UserInputService.InputEnded:Connect(function(endInput)
+                        if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
+                            draggingResize = false
+                            if conn then conn:Disconnect() end
+                            if endConn then endConn:Disconnect() end
+                        end
+                    end)
+                end
+            end)
+        end
+    else
+        if handle then handle:Destroy() end
+    end
+end
+
 local function ToggleShootButtonGui(enable)
     if enable then
         if ShootButtonGui then ShootButtonGui:Destroy() end
@@ -481,13 +673,13 @@ local function ToggleShootButtonGui(enable)
 
         local ShootButton = Instance.new("TextButton")
         ShootButton.Name = "ShootButton"
-        ShootButton.Size = UDim2.new(0, 150, 0, 70)
-        ShootButton.Position = UDim2.new(0.75, 0, 0.5, 5)
+        ShootButton.Size = ShootBtnSize
+        ShootButton.Position = ShootBtnPos
         ShootButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         ShootButton.BackgroundTransparency = 0.5
         ShootButton.Text = "SHOOT"
         ShootButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ShootButton.TextSize = 18
+        ShootButton.TextSize = 14
         ShootButton.Font = Enum.Font.SourceSans
         ShootButton.Active = true
         ShootButton.Draggable = false
@@ -523,99 +715,115 @@ local function ToggleShootButtonGui(enable)
             end
         end)
 
-        ---------------------------------------------------------------------------
--- [ DISPARO PROJETADO COM AJUSTE DE TRAJETÓRIA E DESEQUIPE PRECOCE ]
----------------------------------------------------------------------------
-ShootButton.MouseButton1Down:Connect(function()
-    local Character = LocalPlayer.Character
-    local Backpack = LocalPlayer:FindFirstChild("Backpack")
-    if not Character or not Backpack then return end
+        local draggingPos = false
+        local dragStartMouse = Vector2.zero
+        local dragStartPos = UDim2.new()
 
-    local gunInBackpack = Backpack:FindFirstChild("Gun")
-    local gunInChar = Character:FindFirstChild("Gun")
-    local gun = gunInChar or gunInBackpack
-
-    if gun then
-        -- 1. CONTROLE DE TEMPO DO DESEQUIPE (Começa a contar no momento em que equipa)
-        if gun.Parent == Backpack then
-            gun.Parent = Character
-            
-            -- Cronômetro rigoroso: 50 milissegundos após equipar, a arma é guardada
-            task.delay(0.05, function()
-                if gun and gun.Parent == Character then
-                    gun.Parent = Backpack
-                end
-            end)
-        else
-            -- Se a arma já estava na mão por algum motivo, guarda 50ms após o clique
-            task.delay(0.05, function()
-                if gun and gun.Parent == Character then
-                    gun.Parent = Backpack
-                end
-            end)
-        end
-
-        -- Pequeno tempo para o Roblox processar o nó da ferramenta na mão (0.005s solicitado)
-        task.wait(0.005)
-
-        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
-        if not murderer or not murderer.Character then return end
-
-        local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
-            or murderer.Character:FindFirstChild("UpperTorso") 
-            or murderer.Character:FindFirstChild("Torso")
-        local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
-        local myRoot = Character:FindFirstChild("HumanoidRootPart")
-        
-        if targetPart and humanoid and humanoid.Health > 0 and myRoot then
-            local shootEvent = gun:FindFirstChild("Shoot")
-            
-            if shootEvent and shootEvent:IsA("RemoteEvent") then
-                -- 2. ORIGEM REAL: O tiro nasce obrigatoriamente de VOCÊ (Sua HumanoidRootPart)
-                local originPos = myRoot.Position
-                local targetPos = targetPart.Position
+        ShootButton.InputBegan:Connect(function(input)
+            if ShootDragActive and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                draggingPos = true
+                dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+                dragStartPos = ShootButton.Position
                 
-                -- Velocidade padrão calibrada do projétil do MM2 para o cálculo vetorial
-                local bulletSpeed = 250
-                local distance = (targetPos - originPos).Magnitude
+                local conn, endConn
+                conn = UserInputService.InputChanged:Connect(function(moveInput)
+                    if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingPos then
+                        local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - dragStartMouse
+                        ShootBtnPos = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+                        ShootButton.Position = ShootBtnPos
+                    end
+                end)
                 
-                -- Puxa as latências físicas de rede atuais
-                local rawPing = LocalPlayer:GetNetworkPing()
-                local ping = (rawPing > 0) and rawPing or 0.05
-                
-                -- Tempo total estimado que a física do servidor leva para cruzar a distância
-                local travelTime = (distance / bulletSpeed) + ping
-                
-                -- 3. CORRETOR DE TRAJETÓRIA DINÂMICO
-                -- Em vez de atirar onde ele está, ajusta o vetor no ar baseando-se na direção de movimento
-                local velocity = targetPart.AssemblyLinearVelocity
-                local correctedTargetPos = targetPos
-                
-                -- Aplica a correção de interceptação apenas se o alvo estiver efetivamente correndo ou pulando
-                if velocity.Magnitude > 1.5 and velocity.Magnitude < 100 then
-                    correctedTargetPos = targetPos + (velocity * travelTime)
-                end
-                
-                -- Monta os CFrames finais gerados a partir do seu corpo em direção ao alvo recalculado
-                local realOrigin = CFrame.new(originPos, correctedTargetPos)
-                local realTarget = CFrame.new(correctedTargetPos)
-                
-                -- Envia a trajetória corrigida nativamente do seu ponto de origem
-                shootEvent:FireServer(realOrigin, realTarget)
-
-                -- 4. INTERCEPTADOR VISUAL DE ANIMAÇÃO
-                task.spawn(function()
-                    for i = 1, 5 do
-                        PararAnimacoesDeTiro(Character)
-                        game:GetService("RunService").Heartbeat:Wait()
+                endConn = UserInputService.InputEnded:Connect(function(endInput)
+                    if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
+                        draggingPos = false
+                        if conn then conn:Disconnect() end
+                        if endConn then endConn:Disconnect() end
                     end
                 end)
             end
-        end
-    end
-end)
+        end)
+
+        ShootButton.MouseButton1Down:Connect(function()
+            if ShootDragActive then return end
+            local Character = LocalPlayer.Character
+            local Backpack = LocalPlayer:FindFirstChild("Backpack")
+            if not Character or not Backpack then return end
+
+            local gunInBackpack = Backpack:FindFirstChild("Gun")
+            local gunInChar = Character:FindFirstChild("Gun")
+            local gun = gunInChar or gunInBackpack
+
+            if gun then
+                if gun.Parent == Backpack then
+                    gun.Parent = Character
+                    
+                    task.delay(0.05, function()
+                        if gun and gun.Parent == Character then
+                            gun.Parent = Backpack
+                        end
+                    end)
+                else
+                    task.delay(0.05, function()
+                        if gun and gun.Parent == Character then
+                            gun.Parent = Backpack
+                        end
+                    end)
+                end
+
+                task.wait(0.005)
+
+                local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+                if not murderer or not murderer.Character then return end
+
+                local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
+                    or murderer.Character:FindFirstChild("UpperTorso") 
+                    or murderer.Character:FindFirstChild("Torso")
+                local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
+                local myRoot = Character:FindFirstChild("HumanoidRootPart")
+                
+                if targetPart and humanoid and humanoid.Health > 0 and myRoot then
+                    local shootEvent = gun:FindFirstChild("Shoot")
+                    
+                    if shootEvent and shootEvent:IsA("RemoteEvent") then
+                        local originPos = myRoot.Position
+                        local targetPos = targetPart.Position
+                        
+                        local bulletSpeed = 250
+                        local distance = (targetPos - originPos).Magnitude
+                        
+                        local rawPing = LocalPlayer:GetNetworkPing()
+                        local ping = (rawPing > 0) and rawPing or 0.05
+                        
+                        local travelTime = (distance / bulletSpeed) + ping
+                        
+                        local velocity = targetPart.AssemblyLinearVelocity
+                        local correctedTargetPos = targetPos
+                        
+                        if velocity.Magnitude > 1.5 and velocity.Magnitude < 100 then
+                            correctedTargetPos = targetPos + (velocity * travelTime)
+                        end
+                        
+                        local realOrigin = CFrame.new(originPos, correctedTargetPos)
+                        local realTarget = CFrame.new(correctedTargetPos)
+                        
+                        shootEvent:FireServer(realOrigin, realTarget)
+
+                        task.spawn(function()
+                            for i = 1, 5 do
+                                if typeof(PararAnimacoesDeTiro) == "function" then
+                                    PararAnimacoesDeTiro(Character)
+                                end
+                                game:GetService("RunService").Heartbeat:Wait()
+                            end
+                        end)
+                    end
+                end
+            end
+        end)
 
         ShootButtonGui = ScreenGui
+        UpdateShootButtonState()
     else
         if ShootButtonGui then
             ShootButtonGui:Destroy()
@@ -1129,12 +1337,8 @@ local function ExecutarMecanismoFling(TargetPlayer)
             for _, track in ipairs(animator:GetPlayingAnimationTracks()) do track:Stop() end
         end
         
-        -- FUNÇÃO DE POSIÇÃO E ROTAÇÃO
         local FPos = function(targetPosition, rotationAngle)
-            -- 2 studs acima
             local posicaoFinal = targetPosition + Vector3.new(0, 2, 0)
-            
-            -- Mortal pra frente no eixo X
             local finalCFrame = CFrame.new(posicaoFinal) * CFrame.Angles(math.rad(rotationAngle), 0, 0)
             
             root.CFrame = finalCFrame
@@ -1142,12 +1346,10 @@ local function ExecutarMecanismoFling(TargetPlayer)
                 char:SetPrimaryPartCFrame(finalCFrame)
             end
             
-            -- Velocidade forçando pra baixo
             root.Velocity = Vector3.new(50000, -50000, 50000)
             root.RotVelocity = Vector3.new(50000, 50000, 50000)
         end
         
-        -- SISTEMA: Focado se parado / Vai e Vem se andando + Mortal
         local SFBasePart = function(BasePart)
             local TimeToWait = 5
             local Time = tick()
@@ -1162,13 +1364,10 @@ local function ExecutarMecanismoFling(TargetPlayer)
                     if BasePart.AssemblyLinearVelocity.Magnitude > 250 then break end
                     local dt = task.wait()
                     
-                    -- Adiciona a rotação (Mortal)
                     currentAngle = (currentAngle + 45) % 360
-                    
                     local targetPosition
                     local isMoving = false
                     
-                    -- Checa se o alvo está andando/tentando se mover
                     if tHum and tHum.MoveDirection.Magnitude > 0.1 then
                         isMoving = true
                     elseif not tHum and BasePart.AssemblyLinearVelocity.Magnitude > 1 then
@@ -1176,12 +1375,10 @@ local function ExecutarMecanismoFling(TargetPlayer)
                     end
                     
                     if not isMoving then
-                        -- ALVO PARADO: Trava na posição exata dele (sem ir pra frente/trás)
                         targetPosition = BasePart.Position
-                        progress = 0 -- Reseta a distância para que, ao andar, recomece do zero
+                        progress = 0
                         movingForward = true
                     else
-                        -- ALVO ANDANDO: Retoma o sistema de ir 15 studs pra frente e pra trás
                         local dir = Vector3.zero
                         if tHum then
                             dir = Vector3.new(tHum.MoveDirection.X, 0, tHum.MoveDirection.Z).Unit
@@ -1189,7 +1386,6 @@ local function ExecutarMecanismoFling(TargetPlayer)
                             dir = Vector3.new(BasePart.AssemblyLinearVelocity.X, 0, BasePart.AssemblyLinearVelocity.Z).Unit
                         end
                         
-                        -- Lógica de Vai e Vem
                         if movingForward then
                             progress = progress + (speed * dt)
                             if progress >= distance then
@@ -1204,7 +1400,6 @@ local function ExecutarMecanismoFling(TargetPlayer)
                             end
                         end
                         
-                        -- Aplica o offset do vai e vem
                         targetPosition = BasePart.Position + (dir * progress)
                     end
                     
@@ -1334,7 +1529,7 @@ CombatTab:Toggle({
 CombatTab:Slider({
     Title = "FOV", 
     Step = 5, 
-    Value = {Min = 50, Max = 500, Default = 100}, -- Os valores precisam ficar dentro desta tabela!
+    Value = {Min = 50, Max = 500, Default = 100},
     Callback = function(v) 
         FovSize = v 
     end
@@ -1348,7 +1543,18 @@ CombatTab:Toggle({
     end
 })
 
-CombatTab:Toggle({
+---------------------------------------------------------------------------
+-- [ TAB MURDERER ]
+---------------------------------------------------------------------------
+MurdererTab:Toggle({
+    Title = "Throw knife button", 
+    Default = false, 
+    Callback = function(v) 
+        ToggleThrowButtonGui(v) 
+    end
+})
+
+MurdererTab:Toggle({
     Title = "Knife aura", 
     Default = false, 
     Callback = function(v)
@@ -1356,22 +1562,114 @@ CombatTab:Toggle({
     end
 })
 
-CombatTab:Toggle({
-    Title = "Throw Knife Button", 
+MurdererTab:Toggle({
+    Title = "Knife sheriff", 
     Default = false, 
-    Callback = function(v) 
-        ToggleThrowButtonGui(v) 
+    Callback = function(v)
+        KillAuraSheriffOnly = v
     end
 })
 
-CombatTab:Toggle({
-    Title = "Shoot button", 
+MurdererTab:Toggle({
+    Title = "Resize Button", 
+    Default = false, 
+    Callback = function(v)
+        ThrowResizeActive = v
+        UpdateThrowButtonState()
+    end
+})
+
+MurdererTab:Toggle({
+    Title = "Drag Button", 
+    Default = false, 
+    Callback = function(v)
+        ThrowDragActive = v
+    end
+})
+
+MurdererTab:Button({
+    Title = "Reset Button", 
+    Callback = function()
+        ThrowBtnSize = UDim2.new(0, 150, 0, 70)
+        ThrowBtnPos = UDim2.new(0.75, 0, 0.35, -20)
+        UpdateThrowButtonState()
+    end
+})
+
+---------------------------------------------------------------------------
+-- [ TAB SHERIFF ]
+---------------------------------------------------------------------------
+SheriffTab:Toggle({
+    Title = "Shoot murderer button", 
     Default = false, 
     Callback = function(v) 
         ToggleShootButtonGui(v) 
     end
 })
 
+SheriffTab:Toggle({
+    Title = "Auto get gun", 
+    Default = false, 
+    Callback = function(v)
+        AutoCollectGunEnabled = v
+        task.spawn(function()
+            while AutoCollectGunEnabled do
+                local myRole = GetPlayerRole(LocalPlayer)
+                local isAliveAndParticipating = IsParticipatingAndAlive(LocalPlayer)
+                
+                if myRole == "Innocent" and isAliveAndParticipating then
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    local gun = FindDroppedGun()
+                    
+                    if hrp and gun then
+                        local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
+                        if part then
+                            local posicaoOriginalArma = part.CFrame
+                            part.CFrame = hrp.CFrame
+                            task.wait(0.01)
+                            if part then 
+                                part.CFrame = posicaoOriginalArma 
+                            end
+                            task.wait(5)
+                        end
+                    end
+                end
+                task.wait()
+            end
+        end)
+    end
+})
+
+SheriffTab:Toggle({
+    Title = "Resize Button", 
+    Default = false, 
+    Callback = function(v)
+        ShootResizeActive = v
+        UpdateShootButtonState()
+    end
+})
+
+SheriffTab:Toggle({
+    Title = "Drag Button", 
+    Default = false, 
+    Callback = function(v)
+        ShootDragActive = v
+    end
+})
+
+SheriffTab:Button({
+    Title = "Reset Button", 
+    Callback = function()
+        ShootBtnSize = UDim2.new(0, 150, 0, 70)
+        ShootBtnPos = UDim2.new(0.75, 0, 0.5, 5)
+        UpdateShootButtonState()
+    end
+})
+
+---------------------------------------------------------------------------
+-- [ TAB FLING ]
+---------------------------------------------------------------------------
 FlingTab:Button({
     Title = "Fling murderer",
     Callback = function()
@@ -1417,7 +1715,12 @@ FlingTab:Button({
     end
 })
 
--- ADICIONE O BOTÃO DE ATUALIZAR AQUI:
+local function AtualizarTodasAsListas()
+    local novaLista = GetPlayerNamesList()
+    FlingDropdown:Refresh(novaLista)
+    if PlayerDropdown then PlayerDropdown:Refresh(novaLista) end
+end
+
 FlingTab:Button({
     Title = "Update list", 
     Callback = function() 
@@ -1425,14 +1728,6 @@ FlingTab:Button({
     end
 })
 
-local function AtualizarTodasAsListas()
-    local novaLista = GetPlayerNamesList()
-    FlingDropdown:Refresh(novaLista)
-    if PlayerDropdown then PlayerDropdown:Refresh(novaLista) end
-end
-
--- Mantém apenas a limpeza das variáveis se o jogador escolhido sair do jogo, 
--- mas NÃO atualiza o Dropdown sozinho.
 Players.PlayerRemoving:Connect(function(p)
     if SelectedPlayerToFling == p.Name then SelectedPlayerToFling = "" end
     if SelectedPlayerToTp == p.Name then SelectedPlayerToTp = "" end
@@ -1529,14 +1824,7 @@ TeleportTab:Button({
 
 TeleportTab:Button({Title = "Atualizar Lista", Callback = function() AtualizarTodasAsListas() end})
 TeleportTab:Button({Title = "TP Área Segura", Callback = function() TeleportToSafeArea() end})
--- Função necessária para o teleporte funcionar
-local function TeleportToCFrame(targetCFrame)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetCFrame.Position)
-    end
-end
 
--- Botão TP Lobby (Teleporta para a posição exata solicitada)
 TeleportTab:Button({
     Title = "TP Lobby",
     Callback = function()
@@ -1550,17 +1838,12 @@ TeleportTab:Button({
         local lobbyPos = Vector3.new(14, 504, -12)
         local validSpawns = {}
         
-        -- 1. Varre o workspace procurando por modelos de mapas válidos
         for _, obj in ipairs(workspace:GetChildren()) do
-            -- Ignora tudo que for jogador ou lobby
             if obj:IsA("Model") and obj.Name ~= "Lobby" and obj.Name ~= "LobbyWorkspace" and obj.Name ~= "SafeArea" and not Players:GetPlayerFromCharacter(obj) then
-                
-                -- Procura estritamente pela pasta de Spawns da arena do MM2
                 local spawnsFolder = obj:FindFirstChild("Spawns")
                 if spawnsFolder then
                     for _, spawnPart in ipairs(spawnsFolder:GetChildren()) do
                         if spawnPart:IsA("BasePart") then
-                            -- Verifica se o spawn está longe do lobby para confirmar que é o mapa do jogo
                             if (spawnPart.Position - lobbyPos).Magnitude >= 500 then
                                 table.insert(validSpawns, spawnPart)
                             end
@@ -1570,7 +1853,6 @@ TeleportTab:Button({
             end
         end
 
-        -- 2. Sistema de backup caso o mapa esteja dentro da pasta "NormalMaps"
         if #validSpawns == 0 then
             local normalMaps = workspace:FindFirstChild("NormalMaps")
             if normalMaps then
@@ -1589,13 +1871,10 @@ TeleportTab:Button({
             end
         end
         
-        -- 3. Teleporta para um dos spawns válidos encontrados
         if #validSpawns > 0 then 
             local randomSpawn = validSpawns[math.random(1, #validSpawns)]
-            -- O "+ CFrame.new(0, 5, 0)" garante que você caia em cima do bloco, e não dentro do chão
             TeleportToCFrame(randomSpawn.CFrame * CFrame.new(0, 5, 0)) 
         else
-            -- Se imprimir isso no F9, significa que a partida ainda não começou ou o mapa ainda não carregou
             print("Nenhum spawn de arena encontrado! A partida já começou?")
         end
     end
@@ -1644,51 +1923,6 @@ FarmTab:Toggle({
     end
 })
 
-FarmTab:Toggle({
-    Title = "Auto Get Gun",
-    Default = false,
-    Callback = function(v)
-        AutoCollectGunEnabled = v
-        task.spawn(function()
-            while AutoCollectGunEnabled do
-                local myRole = GetPlayerRole(LocalPlayer)
-                local isAliveAndParticipating = IsParticipatingAndAlive(LocalPlayer)
-                
-                if myRole == "Innocent" and isAliveAndParticipating then
-                    local char = LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    local gun = FindDroppedGun()
-                    
-                    if hrp and gun then
-                        local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
-                        if part then
-                            -- Salva a posição original
-                            local posicaoOriginalArma = part.CFrame
-                            
-                            -- Puxa a arma para o jogador
-                            part.CFrame = hrp.CFrame
-                            
-                            -- Espera 0.05 segundos (fração rápida)
-                            task.wait(0.01)
-                            
-                            -- Verifica se a arma ainda existe e devolve ela
-                            if part then 
-                                part.CFrame = posicaoOriginalArma 
-                            end
-                            
-                            -- Tempo de recarga: espera 5 segundos para puxar de novo
-                            task.wait(5)
-                        end
-                    end
-                end
-                -- Evita o travamento do jogo se as condições não forem atingidas
-                task.wait()
-            end
-        end)
-    end
-})
-
--- Variável de controle do Lock Trade
 local LockTradeEnabled = false
 
 FarmTab:Toggle({
@@ -1699,20 +1933,16 @@ FarmTab:Toggle({
         local rs = game:GetService("ReplicatedStorage")
         
         if v then
-            -- Inicia um loop para manter as trocas trancadas enquanto estiver ativado
             task.spawn(function()
                 while LockTradeEnabled do
                     pcall(function()
-                        -- Desativa os pedidos de troca
                         rs.Trade.SetRequestsEnabled:FireServer(false)
-                        -- Recusa instantaneamente qualquer troca pendente
                         rs.Trade.DeclineRequest:FireServer()
                     end)
-                    task.wait(1) -- Checa a cada 1 segundo
+                    task.wait(1)
                 end
             end)
         else
-            -- Quando desativar o toggle, ele libera as trocas de novo
             pcall(function()
                 rs.Trade.SetRequestsEnabled:FireServer(true)
             end)
@@ -1746,7 +1976,6 @@ FarmTab:Button({
                         elseif obj:IsA("RemoteFunction") then
                             obj:InvokeServer()
                         end
-                        -- Aviso opcional no console (F9)
                         print("Prestígio ativado com sucesso!")
                         break
                     end
@@ -1791,16 +2020,15 @@ PerformanceTab:Toggle({
 }) 
 
 local XRayEnabled = false
-local PropriedadesOriginais = {} -- Guarda transparência e material originais
+local PropriedadesOriginais = {}
 
-PerformanceTab:Toggle({
+Esp:Toggle({
     Title = "X-Ray",
     Default = false,
     Callback = function(Value)
         XRayEnabled = Value
         
         if XRayEnabled then
-            -- Loop contínuo para atualizar dinamicamente conforme você anda pelo mapa
             task.spawn(function()
                 while XRayEnabled do
                     local char = game.Players.LocalPlayer.Character
@@ -1814,7 +2042,6 @@ PerformanceTab:Toggle({
                             if not XRayEnabled then break end
                             
                             if obj:IsA("BasePart") then
-                                -- Verifica se a peça pertence a algum jogador (você ou outros)
                                 local eDeJogador = false
                                 local atual = obj
                                 while atual and atual ~= workspace do
@@ -1826,7 +2053,6 @@ PerformanceTab:Toggle({
                                 end
                                 
                                 if not eDeJogador then
-                                    -- Salva o estado original na primeira leitura (apenas blocos com transparência 0)
                                     if PropriedadesOriginais[obj] == nil and obj.Transparency == 0 then
                                         PropriedadesOriginais[obj] = {
                                             Transparency = obj.Transparency,
@@ -1834,19 +2060,15 @@ PerformanceTab:Toggle({
                                         }
                                     end
                                     
-                                    -- Se o bloco for um dos afetados
                                     local props = PropriedadesOriginais[obj]
                                     if props then
-                                        -- Muda o material para SmoothPlastic
                                         obj.Material = Enum.Material.SmoothPlastic
-                                        
-                                        -- Calcula a distância em tempo real
                                         local dist = (obj.Position - myPos).Magnitude
                                         
                                         if dist <= 200 then
-                                            obj.Transparency = 0.8 -- Dentro do raio de 200 studs
+                                            obj.Transparency = 0.8
                                         else
-                                            obj.Transparency = 1   -- Fora do raio de 200 studs
+                                            obj.Transparency = 1
                                         end
                                     end
                                 end
@@ -1859,11 +2081,10 @@ PerformanceTab:Toggle({
                         end
                     end
                     
-                    task.wait(0.2) -- Atualiza as posições a cada 0.2 segundos enquanto você anda
+                    task.wait(0.2)
                 end
             end)
         else
-            -- Desativando o X-Ray (Restaura transparência e material originais)
             task.spawn(function()
                 local count = 0
                 for obj, props in pairs(PropriedadesOriginais) do
@@ -1884,7 +2105,7 @@ PerformanceTab:Toggle({
 })
 
 ---------------------------------------------------------------------------
--- [ SISTEMA DE SHOW FPS E PING NA TELA (ESTILO BOTÃO GIRATÓRIO) ]
+-- [ SISTEMA DE SHOW FPS E PING NA TELA ]
 ---------------------------------------------------------------------------
 local FpsGui = nil
 local PingGui = nil
@@ -1902,11 +2123,11 @@ local function ToggleFpsGui(enable)
         local FpsLabel = Instance.new("TextLabel")
         FpsLabel.Name = "FpsLabel"
         FpsLabel.Size = UDim2.new(0, 90, 0, 35)
-        FpsLabel.Position = UDim2.new(0.85, 0, 0.01, 0) -- Movido um pouco mais para cima na tela
+        FpsLabel.Position = UDim2.new(0.85, 0, 0.01, 0)
         FpsLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         FpsLabel.BackgroundTransparency = 0.5
         FpsLabel.Text = "FPS 0"
-        FpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Fixo na cor branca
+        FpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         FpsLabel.TextSize = 16
         FpsLabel.Font = Enum.Font.SourceSans
         FpsLabel.Parent = ScreenGui
@@ -1935,13 +2156,11 @@ local function ToggleFpsGui(enable)
         task.spawn(function()
             local rot = 0
             while FpsLabel.Parent do
-                -- Animação giratória da borda
                 rot = (rot + 3) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
                 
-                -- Sistema do FPS atualizando a cada 1 segundo (Sempre branco)
                 frames = frames + 1
                 if tick() - lastUpdate >= 1 then
                     FpsLabel.Text = "FPS " .. frames
@@ -1974,12 +2193,11 @@ local function TogglePingGui(enable)
         local PingLabel = Instance.new("TextLabel")
         PingLabel.Name = "PingLabel"
         PingLabel.Size = UDim2.new(0, 90, 0, 35)
-        -- Altura de 35 do FPS + 3 pixels de separação = 38
         PingLabel.Position = UDim2.new(0.85, 0, 0.03, 38) 
         PingLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         PingLabel.BackgroundTransparency = 0.5
         PingLabel.Text = "Ping 0"
-        PingLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Fixo na cor branca
+        PingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         PingLabel.TextSize = 16
         PingLabel.Font = Enum.Font.SourceSans
         PingLabel.Parent = ScreenGui
@@ -2007,13 +2225,11 @@ local function TogglePingGui(enable)
         task.spawn(function()
             local rot = 0
             while PingLabel.Parent do
-                -- Animação giratória da borda
                 rot = (rot + 3) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
                 
-                -- Sistema do Ping atualizando a cada 1 segundo (Sempre branco)
                 if tick() - lastUpdate >= 1 then
                     local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
                     PingLabel.Text = "Ping " .. ping
@@ -2032,7 +2248,6 @@ local function TogglePingGui(enable)
     end
 end
 
--- ADICIONANDO AS OPÇÕES NA TAB INFO
 InfoTab:Toggle({
     Title = "Show FPS",
     Default = false,
@@ -2050,7 +2265,7 @@ InfoTab:Toggle({
 })
 
 -- ==========================================
--- GHOST MODE (MAPA OTIMIZADO + SYNC INSTANTÂNEO + AUTO-DESATIVAR AO MORRER)
+-- GHOST MODE
 -- ==========================================
 local ghostModeActive = false
 local ghostMapLoop = nil
@@ -2100,7 +2315,7 @@ local function syncCloneAnimationsExact(realModel, cloneModel, offset)
 end
 
 local ghostToggle
-ghostToggle = PerformanceTab:Toggle({
+ghostToggle = PlayerTab:Toggle({
     Title = "Ghost Mode",
     Default = false,
     Callback = function(state)
@@ -2114,7 +2329,6 @@ ghostToggle = PerformanceTab:Toggle({
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             ghostOffset = Vector3.new(10000, 1000, 10000)
 
-            -- Detecta quando o personagem morre e desativa o toggle automaticamente
             if humanoid then
                 ghostDiedConn = humanoid.Died:Connect(function()
                     if ghostToggle and typeof(ghostToggle.SetValue) == "function" then
@@ -2122,7 +2336,6 @@ ghostToggle = PerformanceTab:Toggle({
                     elseif ghostToggle and typeof(ghostToggle.Set) == "function" then
                         ghostToggle:Set(false)
                     else
-                        -- Caso a UI lib use atualização direta pelo callback
                         ghostToggle.Callback(false)
                     end
                 end)
@@ -2178,16 +2391,13 @@ ghostToggle = PerformanceTab:Toggle({
 
                 if cloneHRP then
                     local expectedRealPos = cloneHRP.Position + ghostOffset
-                    -- Se o jogo teleportar o personagem real
                     if (realHRP.Position - expectedRealPos).Magnitude > 15 then
                         realHRP.CFrame = realHRP.CFrame + ghostOffset
                     end
                 end
                 
-                -- Sincroniza visual/animações do clone
                 syncCloneAnimationsExact(currentChar, ghostClone, ghostOffset)
 
-                -- Garante transparência 0.5 sem esconder a cabeça
                 for _, part in ipairs(ghostClone:GetDescendants()) do
                     if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "CollisionBox" then
                         part.LocalTransparencyModifier = 0
@@ -2247,7 +2457,6 @@ ghostToggle = PerformanceTab:Toggle({
                 end
             end)
         else
-            -- Limpeza dos eventos e conexões
             RunService:UnbindFromRenderStep("GhostSyncVisual")
             if ghostMapLoop then ghostMapLoop:Disconnect() ghostMapLoop = nil end
             if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
