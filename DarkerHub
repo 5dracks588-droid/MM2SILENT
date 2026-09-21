@@ -437,8 +437,8 @@ local function UpdateThrowButtonState()
                     conn = UserInputService.InputChanged:Connect(function(moveInput)
                         if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingResize then
                             local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - resizeStartMouse
-                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 5, 200)
-                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 5, 200)
+                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 20, 200)
+                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 20, 200)
                             ThrowBtnSize = UDim2.new(0, newW, 0, newH)
                             ThrowButton.Size = ThrowBtnSize
                         end
@@ -477,7 +477,7 @@ local function ToggleThrowButtonGui(enable)
         ThrowButton.BackgroundTransparency = 0.5
         ThrowButton.Text = "THROW KNIFE"
         ThrowButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ThrowButton.TextSize = 14
+        ThrowButton.TextSize = 16
         ThrowButton.Font = Enum.Font.SourceSans
         ThrowButton.Active = true
         ThrowButton.Draggable = false
@@ -639,8 +639,8 @@ local function UpdateShootButtonState()
                     conn = UserInputService.InputChanged:Connect(function(moveInput)
                         if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingResize then
                             local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - resizeStartMouse
-                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 5, 500)
-                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 5, 500)
+                            local newW = math.clamp(math.floor(resizeStartSize.X + delta.X), 20, 500)
+                            local newH = math.clamp(math.floor(resizeStartSize.Y + delta.Y), 20, 500)
                             ShootBtnSize = UDim2.new(0, newW, 0, newH)
                             ShootButton.Size = ShootBtnSize
                         end
@@ -679,7 +679,7 @@ local function ToggleShootButtonGui(enable)
         ShootButton.BackgroundTransparency = 0.5
         ShootButton.Text = "SHOOT"
         ShootButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ShootButton.TextSize = 14
+        ShootButton.TextSize = 16
         ShootButton.Font = Enum.Font.SourceSans
         ShootButton.Active = true
         ShootButton.Draggable = false
@@ -2022,7 +2022,7 @@ PerformanceTab:Toggle({
 local XRayEnabled = false
 local PropriedadesOriginais = {}
 
-Esp:Toggle({
+EspTab:Toggle({
     Title = "X-Ray",
     Default = false,
     Callback = function(Value)
