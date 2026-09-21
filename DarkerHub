@@ -278,6 +278,28 @@ task.spawn(function()
 end)
 
 ---------------------------------------------------------------------------
+-- [ HITBOX EXPANDER (APENAS QUANDO FOR MURDERER) ]
+---------------------------------------------------------------------------
+task.spawn(function()
+    while task.wait(0.5) do
+        if GetPlayerRole(LocalPlayer) == "Murderer" then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and IsParticipatingAndAlive(player) then
+                    local char = player.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    
+                    if hrp then
+                        hrp.Size = Vector3.new(10, 5, 10)
+                        hrp.Transparency = 1
+                        hrp.CanCollide = false
+                    end
+                end
+            end
+        end
+    end
+end)
+
+---------------------------------------------------------------------------
 -- [ SILENT AIM (METATABLE HOOK) ]
 ---------------------------------------------------------------------------
 pcall(function()
