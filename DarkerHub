@@ -932,135 +932,261 @@ RunService.Stepped:Connect(function()
 end)
 
 ---------------------------------------------------------------------------
--- [ AUTO COIN COM RADAR E ROTA FIXA ]
+-- [ AUTO COIN COMPLETO - OFFSET Y + PAUSA TOTAL SEM TELEPORTE ]
 ---------------------------------------------------------------------------
+local CoinsCache = {}
+local CoinQueue = {}
+local currentCoinTween = nil
+local currentCoinTarget = nil
+local IsProcessingCoins = false
+local ReevaluateRoute = false
+local coinAddedConnection = nil
+local coinRemovedConnection = nil
+
+-- Valida se o objeto é uma moeda válida no mapa
 local function IsCoinValid(coin)
     return coin 
         and coin.Parent 
-        and not Coletadas[coin] 
+        and coin:IsA("BasePart")
         and coin.Transparency < 1 
         and coin:IsDescendantOf(workspace)
 end
 
-local function GetClosestCoin(centerPos, maxRadius)
-    local menorDistancia = maxRadius or math.huge
-    local moedaAlvo = nil
-
+-- Varre o mapa e atualiza o cache global de moedas
+local function UpdateCoinCache()
+    CoinsCache = {}
     local areaDeBusca = workspace:FindFirstChild("NormalMaps") or workspace:FindFirstChild("Map") or workspace
-
     for _, obj in ipairs(areaDeBusca:GetDescendants()) do
-        if obj:IsA("BasePart") and IsCoinValid(obj) and obj.CanCollide == false then
+        if IsCoinValid(obj) then
             local nome = string.lower(obj.Name)
-            if nome:find("coin") or nome:find("gold") or nome:find("token") then
-                if obj.Size.X <= 6 and obj.Size.Y <= 6 and obj.Size.Z <= 6 then
-                    local model = obj:FindFirstAncestorOfClass("Model")
-                    if model and not model:FindFirstChild("Lobby") then
-                        local dist = (centerPos - obj.Position).Magnitude
-                        if dist <= menorDistancia then
-                            menorDistancia = dist
-                            moedaAlvo = obj
+            if (nome:find("coin") or nome:find("gold") or nome:find("token")) and obj.Size.X <= 6 then
+                local model = obj:FindFirstAncestorOfClass("Model")
+                if model and not model:FindFirstChild("Lobby") then
+                    CoinsCache[obj] = true
+                end
+            end
+        end
+    end
+end
+
+-- Mantém e ordena as 3 moedas mais próximas
+local function GetTop3Coins(centerPos)
+    local sorted = {}
+    for coin in pairs(CoinsCache) do
+        if IsCoinValid(coin) then
+            table.insert(sorted, {coin = coin, dist = (centerPos - coin.Position).Magnitude})
+        else
+            CoinsCache[coin] = nil
+        end
+    end
+    table.sort(sorted, function(a, b) return a.dist < b.dist end)
+    
+    local top3 = {}
+    for i = 1, math.min(3, #sorted) do
+        table.insert(top3, sorted[i].coin)
+    end
+    return top3
+end
+
+-- Evento: Se a moeda atual sumir, cancela voo e reavalia rota
+if coinRemovedConnection then coinRemovedConnection:Disconnect() end
+coinRemovedConnection = workspace.DescendantRemoving:Connect(function(obj)
+    if CoinsCache[obj] then
+        CoinsCache[obj] = nil
+        if currentCoinTarget == obj then
+            ReevaluateRoute = true
+            if currentCoinTween then
+                currentCoinTween:Cancel()
+            end
+        end
+    end
+end)
+
+-- Evento: Quando surge nova moeda mais próxima, redireciona a rota do voo
+if coinAddedConnection then coinAddedConnection:Disconnect() end
+coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
+    if not AutoCoinEnabled then return end
+    if obj:IsA("BasePart") then
+        local nome = string.lower(obj.Name)
+        if nome:find("coin") or nome:find("gold") or nome:find("token") then
+            task.wait(0.05)
+            if IsCoinValid(obj) then
+                local model = obj:FindFirstAncestorOfClass("Model")
+                if model and not model:FindFirstChild("Lobby") then
+                    CoinsCache[obj] = true
+                    
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp and currentCoinTarget and IsCoinValid(currentCoinTarget) then
+                        local currentDist = (hrp.Position - currentCoinTarget.Position).Magnitude
+                        local newDist = (hrp.Position - obj.Position).Magnitude
+                        
+                        if newDist < currentDist - 2 then
+                            ReevaluateRoute = true
+                            if currentCoinTween then
+                                currentCoinTween:Cancel()
+                            end
                         end
                     end
                 end
             end
         end
     end
-    return moedaAlvo
-end
+end)
 
-local currentCoinTween = nil
-
+-- Loop principal do Auto Coin
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.1)
         
-        while AutoCoinEnabled do
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if AutoCoinEnabled and not IsProcessingCoins then
+            IsProcessingCoins = true
             
-            if hrp and hum and hum.Health > 0 and IsParticipatingAndAlive(LocalPlayer) then
+            local noclipConn = nil
+            local bv = nil
+            
+            while AutoCoinEnabled do
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local hum = char and char:FindFirstChild("Humanoid")
                 
-                local alvo = GetClosestCoin(hrp.Position, 100)
-                
-                if not alvo then
-                    alvo = GetClosestCoin(hrp.Position, math.huge)
+                local isAlive = true
+                if typeof(IsParticipatingAndAlive) == "function" then
+                    isAlive = IsParticipatingAndAlive(LocalPlayer)
                 end
                 
-                if alvo then
-                    local noclipConnection = RunService.Stepped:Connect(function()
+                local matchStarted = (Murder ~= nil and Sheriff ~= nil)
+                
+                if not hrp or not hum or hum.Health <= 0 or not isAlive or not matchStarted then
+                    if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
+                    if bv then bv:Destroy() bv = nil end
+                    if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+                    task.wait(0.5)
+                    continue
+                end
+                
+                UpdateCoinCache()
+                CoinQueue = GetTop3Coins(hrp.Position)
+                
+                -- CASO NÃO HAJA MOEDAS NO MAPA:
+                if #CoinQueue == 0 then
+                    -- Desativa totalmente Voo e Noclip (solta o personagem na física normal)
+                    if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
+                    if bv then bv:Destroy() bv = nil end
+                    if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+                    
+                    -- Pausa e aguarda no local até que novas moedas surjam
+                    while AutoCoinEnabled do
+                        task.wait(0.2)
+                        char = LocalPlayer.Character
+                        hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        hum = char and char:FindFirstChild("Humanoid")
+                        if not hrp or not hum or hum.Health <= 0 then break end
+                        
+                        UpdateCoinCache()
+                        CoinQueue = GetTop3Coins(hrp.Position)
+                        if #CoinQueue > 0 then
+                            break -- Sai da pausa e retoma o farm
+                        end
+                    end
+                    
+                    continue
+                end
+                
+                local alvo = CoinQueue[1]
+                if not IsCoinValid(alvo) then
+                    CoinsCache[alvo] = nil
+                    continue
+                end
+                
+                -- Reativa Noclip e sustentação de Voo
+                if not noclipConn then
+                    noclipConn = RunService.Stepped:Connect(function()
                         if char then
                             for _, part in ipairs(char:GetChildren()) do
                                 if part:IsA("BasePart") then part.CanCollide = false end
                             end
                         end
                     end)
-                    
-                    local bv = Instance.new("BodyVelocity")
+                end
+                
+                if not bv or bv.Parent ~= hrp then
+                    if bv then bv:Destroy() end
+                    bv = Instance.new("BodyVelocity")
                     bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
                     bv.Velocity = Vector3.zero
                     bv.Parent = hrp
-
-                    local spawnDestino = alvo.Position
-                    if alvo.Parent and alvo.Parent:IsA("Model") and alvo.Parent.PrimaryPart then
-                        spawnDestino = alvo.Parent.PrimaryPart.Position
-                    elseif alvo.Name == "Coin_Sub" and alvo.Parent and alvo.Parent:FindFirstChild("Coin") then
-                        spawnDestino = alvo.Parent.Coin.Position
-                    end
-                    
-                    local destinoFinal = Vector3.new(spawnDestino.X, spawnDestino.Y + 1.2, spawnDestino.Z)
-                    
-                    local atualPos = hrp.Position
-                    local distancia = (atualPos - destinoFinal).Magnitude
-                    local tempoViagem = math.max(0.05, distancia / AutoCoinSpeed)
-                    
-                    if currentCoinTween then
-                        currentCoinTween:Cancel()
-                    end
-                    
-                    local tweenInfo = TweenInfo.new(tempoViagem, Enum.EasingStyle.Linear)
-                    currentCoinTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(destinoFinal)})
-                    currentCoinTween:Play()
-                    
-                    local tempoEsperado = tick() + tempoViagem
-                    
-                    while AutoCoinEnabled do
-                        local currentPos = hrp.Position
-                        local distToTarget = (currentPos - destinoFinal).Magnitude
-                        
-                        if distToTarget <= 0.8 or tick() >= tempoEsperado then 
-                            break
-                        end
-                        RunService.Heartbeat:Wait()
-                    end
-
-                    if currentCoinTween then
-                        currentCoinTween:Cancel()
-                        currentCoinTween = nil
-                    end
-                    
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.AssemblyAngularVelocity = Vector3.zero
-                    if bv then 
-                        bv.Velocity = Vector3.zero 
-                    end
-                    
-                    if alvo and alvo.Parent then
-                        Coletadas[alvo] = true
-                    end
-                    
-                    task.wait(TempoNaMoeda)
-
-                    if noclipConnection then noclipConnection:Disconnect() end
-                    if bv then bv:Destroy() end
-
-                    if not AutoCoinEnabled then break end
-                else
-                    task.wait(1)
                 end
-            else
-                task.wait(0.5)
+                
+                currentCoinTarget = alvo
+                ReevaluateRoute = false
+                
+                -- Posição base da moeda
+                local spawnDestino = alvo.Position
+                if alvo.Parent and alvo.Parent:IsA("Model") and alvo.Parent.PrimaryPart then
+                    spawnDestino = alvo.Parent.PrimaryPart.Position
+                elseif alvo.Name == "Coin_Sub" and alvo.Parent and alvo.Parent:FindFirstChild("Coin") then
+                    spawnDestino = alvo.Parent.Coin.Position
+                end
+                
+                -- ELEVAÇÃO DE +2 STUDS NO EIXO Y (impede que o HumanoidRootPart afunde os pés no chão)
+                local destinoFinal = spawnDestino + Vector3.new(0, 2, 0)
+                local speed = (type(AutoCoinSpeed) == "number" and AutoCoinSpeed > 0) and AutoCoinSpeed or 25
+                local distanciaAtual = (hrp.Position - destinoFinal).Magnitude
+                local tempoViagem = math.max(0.05, distanciaAtual / speed)
+                
+                if currentCoinTween then currentCoinTween:Cancel() end
+                
+                currentCoinTween = TweenService:Create(
+                    hrp, 
+                    TweenInfo.new(tempoViagem, Enum.EasingStyle.Linear), 
+                    {CFrame = CFrame.new(destinoFinal)}
+                )
+                
+                currentCoinTween:Play()
+                
+                -- Execução contínua do voo até o destino
+                while currentCoinTween and currentCoinTween.PlaybackState == Enum.PlaybackState.Playing do
+                    RunService.Heartbeat:Wait()
+                    
+                    if not AutoCoinEnabled or ReevaluateRoute then
+                        break
+                    end
+                    
+                    if not IsCoinValid(alvo) then
+                        ReevaluateRoute = true
+                        if currentCoinTween then currentCoinTween:Cancel() end
+                        break
+                    end
+                end
+                
+                if ReevaluateRoute or not AutoCoinEnabled then
+                    if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
+                    continue
+                end
+                
+                -- Chegou na moeda
+                if IsCoinValid(alvo) then
+                    CoinsCache[alvo] = nil
+                    
+                    local tempoTotal = (type(TempoNaMoeda) == "number" and TempoNaMoeda > 0) and TempoNaMoeda or 0.2
+                    local tStart = tick()
+                    while tick() - tStart < tempoTotal and AutoCoinEnabled do
+                        RunService.Heartbeat:Wait()
+                        if ReevaluateRoute then break end
+                    end
+                    
+                    UpdateCoinCache()
+                    CoinQueue = GetTop3Coins(hrp.Position)
+                end
             end
+            
+            -- Limpeza completa das conexões e física
+            if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
+            if bv then bv:Destroy() bv = nil end
+            if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+            
+            IsProcessingCoins = false
         end
     end
 end)
