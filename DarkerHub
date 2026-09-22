@@ -1683,7 +1683,7 @@ FlingTab:Button({
 })
 
 FlingTab:Button({
-    Title = "Fling sherife",
+    Title = "Fling sheriff",
     Callback = function()
         if FlingActive then return end
         local target = GetPlayerByRole("Sheriff")
@@ -1695,7 +1695,7 @@ FlingTab:Button({
 })
 
 local FlingDropdown = FlingTab:Dropdown({
-    Title = "Lista de Jogadores",
+    Title = "Player List",
     Values = GetPlayerNamesList(),
     Value = "",
     Callback = function(v) SelectedPlayerToFling = v end
@@ -1804,14 +1804,14 @@ TeleportTab:Button({
 })
 
 PlayerDropdown = TeleportTab:Dropdown({
-    Title = "Escolher Jogador",
+    Title = "Select player",
     Values = GetPlayerNamesList(),
     Value = "",
     Callback = function(v) SelectedPlayerToTp = v end
 })
 
 TeleportTab:Button({
-    Title = "TP Jogador",
+    Title = "TP Player",
     Callback = function()
         if SelectedPlayerToTp ~= "" then
             local target = Players:FindFirstChild(SelectedPlayerToTp)
@@ -1833,7 +1833,7 @@ TeleportTab:Button({
 })
 
 TeleportTab:Button({
-    Title = "TP Arena de Jogo",
+    Title = "TP Game arena",
     Callback = function()
         local lobbyPos = Vector3.new(14, 504, -12)
         local validSpawns = {}
@@ -1907,7 +1907,7 @@ FarmTab:Toggle({
 })
 
 FarmTab:Toggle({
-    Title = "Auto TP Área Segura",
+    Title = "Auto TP Safe zone",
     Default = false,
     Callback = function(v)
         AutoSafeEnabled = v
@@ -2248,7 +2248,7 @@ local function TogglePingGui(enable)
     end
 end
 
-InfoTab:Toggle({
+PerformanceTab:Toggle({
     Title = "Show FPS",
     Default = false,
     Callback = function(v)
@@ -2256,7 +2256,7 @@ InfoTab:Toggle({
     end
 })
 
-InfoTab:Toggle({
+PerformanceTab:Toggle({
     Title = "Show Ping",
     Default = false,
     Callback = function(v)
