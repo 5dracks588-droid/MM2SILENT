@@ -2391,6 +2391,14 @@ PerformanceTab:Toggle({
 })
 
 -- ==========================================
+-- SERVICES
+-- ==========================================
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
 -- GHOST MODE
 -- ==========================================
 local ghostModeActive = false
@@ -2402,6 +2410,7 @@ local ghostClone = nil
 local ghostSkyFolder = nil
 local ghostClonedParts = {}
 local ghostOffset = Vector3.new(10000, 1000, 10000)
+local partPairs = {}
 
 local function prepareGhostClone(model)
     for _, v in pairs(model:GetDescendants()) do
@@ -2428,14 +2437,57 @@ local function prepareGhostClone(model)
     end
 end
 
-local function syncCloneAnimationsExact(realModel, cloneModel, offset)
-    for _, realChild in ipairs(realModel:GetChildren()) do
-        local cloneChild = cloneModel:FindFirstChild(realChild.Name)
-        if cloneChild then
-            if realChild:IsA("BasePart") and cloneChild:IsA("BasePart") then
-                cloneChild.CFrame = realChild.CFrame - offset
+local function addGhostTrail(cloneModel)
+    local hrp = cloneModel:FindFirstChild("HumanoidRootPart") or cloneModel.PrimaryPart
+    if not hrp then return end
+
+    local att0 = Instance.new("Attachment")
+    att0.Name = "GhostTrailAtt0"
+    att0.Position = Vector3.new(0, 1.5, 0)
+    att0.Parent = hrp
+
+    local att1 = Instance.new("Attachment")
+    att1.Name = "GhostTrailAtt1"
+    att1.Position = Vector3.new(0, -1.5, 0)
+    att1.Parent = hrp
+
+    local trail = Instance.new("Trail")
+    trail.Name = "GhostTrail"
+    trail.Attachment0 = att0
+    trail.Attachment1 = att1
+    trail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)) -- Branco
+    trail.Transparency = NumberSequence.new(0.8) -- Transparência 0.8
+    trail.Lifetime = 0.2 -- 200 milésimos (0.2s)
+    trail.FaceCamera = false -- Mantém a trilha vertical
+    trail.Enabled = true
+    trail.Parent = cloneModel
+end
+
+local function buildPartPairs(realModel, cloneModel)
+    table.clear(partPairs)
+    local realFullName = realModel:GetFullName()
+    
+    for _, realPart in ipairs(realModel:GetDescendants()) do
+        if realPart:IsA("BasePart") then
+            local path = realPart:GetFullName():sub(#realFullName + 2)
+            local current = cloneModel
+            
+            for name in string.gmatch(path, "[^.]+") do
+                if current then
+                    current = current:FindFirstChild(name)
+                end
             end
-            syncCloneAnimationsExact(realChild, cloneChild, offset)
+            
+            if current and current:IsA("BasePart") then
+                partPairs[realPart] = current
+            else
+                for _, cp in ipairs(cloneModel:GetDescendants()) do
+                    if cp:IsA("BasePart") and cp.Name == realPart.Name then
+                        partPairs[realPart] = cp
+                        break
+                    end
+                end
+            end
         end
     end
 end
@@ -2455,6 +2507,8 @@ ghostToggle = PlayerTab:Toggle({
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             ghostOffset = Vector3.new(10000, 1000, 10000)
 
+            local initialCFrame = hrp.CFrame
+
             if humanoid then
                 ghostDiedConn = humanoid.Died:Connect(function()
                     if ghostToggle and typeof(ghostToggle.SetValue) == "function" then
@@ -2467,21 +2521,29 @@ ghostToggle = PlayerTab:Toggle({
                 end)
             end
 
+            -- 1. Cria o clone no exato milissegundo e na posição inicial
             char.Archivable = true
             ghostClone = char:Clone()
             
             local cloneHRP = ghostClone:FindFirstChild("HumanoidRootPart")
-            if cloneHRP then ghostClone.PrimaryPart = cloneHRP end
+            if cloneHRP then 
+                ghostClone.PrimaryPart = cloneHRP 
+                cloneHRP.CFrame = initialCFrame
+            end
 
             prepareGhostClone(ghostClone)
+            addGhostTrail(ghostClone)
+            buildPartPairs(char, ghostClone)
+            
             ghostClone.Parent = workspace
+
+            -- Teleporta o jogador para o céu
+            hrp.CFrame = initialCFrame + ghostOffset
             
             ghostSkyFolder = Instance.new("Folder")
             ghostSkyFolder.Name = "SkyCollisionMap"
             ghostSkyFolder.Parent = workspace
 
-            hrp.CFrame = hrp.CFrame + ghostOffset
-            
             local cloneHumanoid = ghostClone:FindFirstChildOfClass("Humanoid")
             if cloneHumanoid then
                 workspace.CurrentCamera.CameraSubject = cloneHumanoid
@@ -2508,28 +2570,31 @@ ghostToggle = PlayerTab:Toggle({
             overlapParams.FilterType = Enum.RaycastFilterType.Exclude
             overlapParams.FilterDescendantsInstances = {char, ghostClone, ghostSkyFolder}
 
+            -- Sincronização ultra-fluida executada ANTES do cálculo de câmera
             RunService:BindToRenderStep("GhostSyncVisual", Enum.RenderPriority.Camera.Value - 1, function()
                 local currentChar = LocalPlayer.Character
                 if not ghostClone or not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
                 
                 local realHRP = currentChar.HumanoidRootPart
-                local cloneHRP = ghostClone:FindFirstChild("HumanoidRootPart")
 
-                if cloneHRP then
-                    local expectedRealPos = cloneHRP.Position + ghostOffset
-                    if (realHRP.Position - expectedRealPos).Magnitude > 15 then
-                        realHRP.CFrame = realHRP.CFrame + ghostOffset
+                -- Suporte ao Shift Lock (orientação por câmera sem interferir na física)
+                if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                    local camCFrame = workspace.CurrentCamera.CFrame
+                    local lookVector = camCFrame.LookVector
+                    local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+                    if flatLook.Magnitude > 0.001 then
+                        realHRP.CFrame = CFrame.lookAt(realHRP.Position, realHRP.Position + flatLook.Unit)
                     end
                 end
-                
-                syncCloneAnimationsExact(currentChar, ghostClone, ghostOffset)
 
-                for _, part in ipairs(ghostClone:GetDescendants()) do
-                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "CollisionBox" then
-                        part.LocalTransparencyModifier = 0
-                        part.Transparency = 0.5
-                    elseif part:IsA("Decal") or part:IsA("Texture") then
-                        part.Transparency = 0.5
+                -- Atualização fluida das partes do clone
+                for realPart, clonePart in pairs(partPairs) do
+                    if realPart and realPart.Parent and clonePart and clonePart.Parent then
+                        clonePart.CFrame = realPart.CFrame - ghostOffset
+                        if clonePart.Name ~= "HumanoidRootPart" and clonePart.Name ~= "CollisionBox" then
+                            clonePart.LocalTransparencyModifier = 0
+                            clonePart.Transparency = 0.5
+                        end
                     end
                 end
             end)
@@ -2601,6 +2666,7 @@ ghostToggle = PlayerTab:Toggle({
             if ghostClone then ghostClone:Destroy() ghostClone = nil end
             if ghostSkyFolder then ghostSkyFolder:Destroy() ghostSkyFolder = nil end
             table.clear(ghostClonedParts)
+            table.clear(partPairs)
         end
     end
 })
