@@ -13,7 +13,9 @@ local Window = WindUI:CreateWindow({
     MinimizeKey = Enum.KeyCode.RightControl
 })
 
--- APLICAÇÃO DO WALLPAPER DENTRO DO MENU
+-- ==========================================
+-- WALLPAPER DO WINDUI (CORRIGIDO E VISÍVEL)
+-- ==========================================
 pcall(function()
     local mainFrame = Window.UIElements and Window.UIElements.Main or Window.Frame or Window.Container
     
@@ -22,18 +24,26 @@ pcall(function()
     end
     
     if mainFrame then
-        mainFrame.BackgroundTransparency = 0.4
+        -- Remove imagens antigas para não duplicar se executar o script de novo
+        if mainFrame:FindFirstChild("MenuWallpaper") then
+            mainFrame.MenuWallpaper:Destroy()
+        end
         
         local bgImage = Instance.new("ImageLabel")
         bgImage.Name = "MenuWallpaper"
         bgImage.Size = UDim2.fromScale(1, 1)
         bgImage.Position = UDim2.fromScale(0, 0)
-        bgImage.Image = "rbxassetid://140088303441183" 
+        bgImage.Image = "rbxassetid://93907109545937" 
         bgImage.BackgroundTransparency = 1
-        bgImage.ImageTransparency = 0 
+        bgImage.ImageTransparency = 0 -- Deixa a imagem com leve transparência para os textos ficarem legíveis
         bgImage.ScaleType = Enum.ScaleType.Crop
-        bgImage.ZIndex = 1
+        bgImage.ZIndex = 1 -- Mantém na camada padrão para carregar visível
         bgImage.Parent = mainFrame
+
+        -- Corta as pontas quadradas para respeitar a borda do menu
+        local uiCorner = Instance.new("UICorner")
+        uiCorner.CornerRadius = UDim.new(0, 10) -- Arredondamento perfeito das bordas
+        uiCorner.Parent = bgImage
     end
 end)
 
