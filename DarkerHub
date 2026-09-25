@@ -2439,11 +2439,15 @@ local ghostMapLoop = nil
 local ghostCamConn = nil
 local ghostCharConn = nil
 local ghostDiedConn = nil
+local ghostCFrameConn = nil
 local ghostClone = nil
 local ghostSkyFolder = nil
 local ghostClonedParts = {}
 local ghostOffset = Vector3.new(10000, 1000, 10000)
 local partPairs = {}
+
+local lastKnownSkyPos = Vector3.zero
+local isUpdatingGhostCFrame = false
 
 local function prepareGhostClone(model)
     for _, v in pairs(model:GetDescendants()) do
@@ -2460,6 +2464,7 @@ local function prepareGhostClone(model)
                 v.Transparency = 1
             else
                 v.Transparency = 0.5
+                v.LocalTransparencyModifier = 0
             end
         elseif v:IsA("Decal") or v:IsA("Texture") then
             v.Transparency = 0.5
@@ -2524,6 +2529,65 @@ local function buildPartPairs(realModel, cloneModel)
     end
 end
 
+-- Intercepta qualquer teletransporte e corrige a posição do personagem no céu
+local function checkTeleport()
+    if not ghostModeActive or isUpdatingGhostCFrame then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local currentPos = hrp.Position
+
+    if lastKnownSkyPos == Vector3.zero then
+        lastKnownSkyPos = currentPos
+        return
+    end
+
+    local dist = (currentPos - lastKnownSkyPos).Magnitude
+
+    -- Se o personagem foi teleportado para o chão (distância grande ou Y baixo)
+    if dist > 100 or currentPos.Y < (ghostOffset.Y - 200) then
+        isUpdatingGhostCFrame = true
+        
+        -- Envia o personagem real para o céu no novo local
+        hrp.CFrame = hrp.CFrame + ghostOffset
+        lastKnownSkyPos = hrp.Position
+
+        -- Atualiza imediatamente a posição do clone no chão
+        for realPart, clonePart in pairs(partPairs) do
+            if realPart and realPart.Parent and clonePart and clonePart.Parent then
+                clonePart.CFrame = realPart.CFrame - ghostOffset
+            end
+        end
+
+        isUpdatingGhostCFrame = false
+    else
+        lastKnownSkyPos = currentPos
+    end
+end
+
+-- Função para teletransporte manual (se você usar no seu próprio script)
+local function teleportPlayer(targetCFrame)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    if ghostModeActive then
+        isUpdatingGhostCFrame = true
+        char.HumanoidRootPart.CFrame = targetCFrame + ghostOffset
+        lastKnownSkyPos = char.HumanoidRootPart.Position
+
+        for realPart, clonePart in pairs(partPairs) do
+            if realPart and realPart.Parent and clonePart and clonePart.Parent then
+                clonePart.CFrame = realPart.CFrame - ghostOffset
+            end
+        end
+        isUpdatingGhostCFrame = false
+    else
+        char.HumanoidRootPart.CFrame = targetCFrame
+    end
+end
+
 local ghostToggle
 ghostToggle = PlayerTab:Toggle({
     Title = "Ghost Mode",
@@ -2535,27 +2599,15 @@ ghostToggle = PlayerTab:Toggle({
         ghostModeActive = state
 
         if ghostModeActive then
+            isUpdatingGhostCFrame = true
             local hrp = char.HumanoidRootPart
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             ghostOffset = Vector3.new(10000, 1000, 10000)
+
             local initialCFrame = hrp.CFrame
 
-            -- Trava a Câmera na morte
             if humanoid then
                 ghostDiedConn = humanoid.Died:Connect(function()
-                    local cam = workspace.CurrentCamera
-                    local currentCamCFrame = cam.CFrame
-                    cam.CameraType = Enum.CameraType.Scriptable
-                    cam.CFrame = currentCamCFrame
-                    
-                    local respawnConn
-                    respawnConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
-                        local newHum = newChar:WaitForChild("Humanoid", 5)
-                        cam.CameraType = Enum.CameraType.Custom
-                        if newHum then cam.CameraSubject = newHum end
-                        respawnConn:Disconnect()
-                    end)
-
                     if ghostToggle and typeof(ghostToggle.SetValue) == "function" then
                         ghostToggle:SetValue(false)
                     elseif ghostToggle and typeof(ghostToggle.Set) == "function" then
@@ -2566,14 +2618,14 @@ ghostToggle = PlayerTab:Toggle({
                 end)
             end
 
+            -- 1. Cria o clone na posição original
             char.Archivable = true
-            
             ghostClone = char:Clone()
+            
             local cloneHRP = ghostClone:FindFirstChild("HumanoidRootPart")
             if cloneHRP then 
                 ghostClone.PrimaryPart = cloneHRP 
                 cloneHRP.CFrame = initialCFrame
-                cloneHRP.Anchored = true 
             end
 
             prepareGhostClone(ghostClone)
@@ -2582,31 +2634,43 @@ ghostToggle = PlayerTab:Toggle({
             
             ghostClone.Parent = workspace
 
+            -- 2. Posiciona o personagem real no céu
+            hrp.CFrame = initialCFrame + ghostOffset
+            lastKnownSkyPos = hrp.Position
+            
             ghostSkyFolder = Instance.new("Folder")
             ghostSkyFolder.Name = "SkyCollisionMap"
             ghostSkyFolder.Parent = workspace
 
-            -- Teleporta o personagem real pro céu
-            char:PivotTo(initialCFrame + ghostOffset)
-
-            local function enforceCloneCamera()
-                if not ghostModeActive or not ghostClone then return end
-                local cam = workspace.CurrentCamera
-                local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid") or ghostClone:FindFirstChild("HumanoidRootPart")
-                if targetSubject and cam.CameraSubject ~= targetSubject then
-                    cam.CameraSubject = targetSubject
-                end
+            local cloneHumanoid = ghostClone:FindFirstChildOfClass("Humanoid")
+            if cloneHumanoid then
+                workspace.CurrentCamera.CameraSubject = cloneHumanoid
             end
 
-            enforceCloneCamera()
+            isUpdatingGhostCFrame = false
 
-            ghostCamConn = workspace.CurrentCamera:GetPropertyChangedSignal("CameraSubject"):Connect(enforceCloneCamera)
+            -- Listener para capturar qualquer teletransporte externo instantaneamente
+            ghostCFrameConn = hrp:GetPropertyChangedSignal("CFrame"):Connect(checkTeleport)
+
+            ghostCamConn = workspace.CurrentCamera:GetPropertyChangedSignal("CameraSubject"):Connect(function()
+                if ghostModeActive and ghostClone and ghostClone:FindFirstChildOfClass("Humanoid") then
+                    local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid")
+                    if workspace.CurrentCamera.CameraSubject ~= targetSubject then
+                        workspace.CurrentCamera.CameraSubject = targetSubject
+                    end
+                end
+            end)
 
             ghostCharConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
                 if ghostModeActive then
                     task.wait(0.2)
                     local newHRP = newChar:WaitForChild("HumanoidRootPart", 5)
-                    if newHRP then newChar:PivotTo(newHRP.CFrame + ghostOffset) end
+                    if newHRP then 
+                        isUpdatingGhostCFrame = true
+                        newHRP.CFrame = newHRP.CFrame + ghostOffset 
+                        lastKnownSkyPos = newHRP.Position
+                        isUpdatingGhostCFrame = false
+                    end
                 end
             end)
 
@@ -2614,28 +2678,16 @@ ghostToggle = PlayerTab:Toggle({
             overlapParams.FilterType = Enum.RaycastFilterType.Exclude
             overlapParams.FilterDescendantsInstances = {char, ghostClone, ghostSkyFolder}
 
-            -- LOOP 1: MOVIMENTAÇÃO E FORÇAMENTO DE CÂMERA (Executa antes da câmera atualizar)
-            RunService:BindToRenderStep("GhostSyncMovement", Enum.RenderPriority.Camera.Value - 1, function()
+            RunService:BindToRenderStep("GhostSyncVisual", Enum.RenderPriority.Camera.Value - 1, function()
                 local currentChar = LocalPlayer.Character
                 if not ghostClone or not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
                 
+                checkTeleport()
+
                 local realHRP = currentChar.HumanoidRootPart
-                local cam = workspace.CurrentCamera
-                local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid")
-
-                -- FORÇA A CÂMERA NO CLONE A CADA FRAME
-                if targetSubject and cam.CameraSubject ~= targetSubject then
-                    cam.CameraSubject = targetSubject
-                end
-
-                -- TELEPORTE: Mantém o personagem real no céu se o jogo teleportar pro chão
-                if realHRP.Position.Y < (ghostOffset.Y - 500) then
-                    currentChar:PivotTo(currentChar:GetPivot() + ghostOffset)
-                    return
-                end
 
                 if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-                    local camCFrame = cam.CFrame
+                    local camCFrame = workspace.CurrentCamera.CFrame
                     local lookVector = camCFrame.LookVector
                     local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
                     if flatLook.Magnitude > 0.001 then
@@ -2646,24 +2698,10 @@ ghostToggle = PlayerTab:Toggle({
                 for realPart, clonePart in pairs(partPairs) do
                     if realPart and realPart.Parent and clonePart and clonePart.Parent then
                         clonePart.CFrame = realPart.CFrame - ghostOffset
-                    end
-                end
-            end)
-
-            -- LOOP 2: VISIBILIDADE (Roda na última prioridade pós-câmera para não ocultar a cabeça)
-            RunService:BindToRenderStep("GhostSyncVisibility", Enum.RenderPriority.Last.Value, function()
-                if not ghostClone then return end
-                for _, v in ipairs(ghostClone:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        if v.Name == "HumanoidRootPart" or v.Name == "CollisionBox" then
-                            v.Transparency = 1
-                            v.LocalTransparencyModifier = 1
-                        else
-                            v.Transparency = 0.5
-                            v.LocalTransparencyModifier = 1-- Impede a câmera de deixar a cabeça invisível
+                        if clonePart.Name ~= "HumanoidRootPart" and clonePart.Name ~= "CollisionBox" then
+                            clonePart.LocalTransparencyModifier = 0
+                            clonePart.Transparency = 0.5
                         end
-                    elseif v:IsA("Decal") or v:IsA("Texture") then
-                        v.Transparency = 0.5
                     end
                 end
             end)
@@ -2717,19 +2755,22 @@ ghostToggle = PlayerTab:Toggle({
                 end
             end)
         else
-            RunService:UnbindFromRenderStep("GhostSyncMovement")
-            RunService:UnbindFromRenderStep("GhostSyncVisibility")
+            RunService:UnbindFromRenderStep("GhostSyncVisual")
             if ghostMapLoop then ghostMapLoop:Disconnect() ghostMapLoop = nil end
             if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
             if ghostCharConn then ghostCharConn:Disconnect() ghostCharConn = nil end
             if ghostDiedConn then ghostDiedConn:Disconnect() ghostDiedConn = nil end
+            if ghostCFrameConn then ghostCFrameConn:Disconnect() ghostCFrameConn = nil end
             
             local currentChar = LocalPlayer.Character
-            if currentChar and currentChar:FindFirstChild("HumanoidRootPart") and currentChar:FindFirstChild("Humanoid") and currentChar.Humanoid.Health > 0 then
-                currentChar:PivotTo(currentChar:GetPivot() - ghostOffset)
+            if currentChar and currentChar:FindFirstChild("HumanoidRootPart") then
+                isUpdatingGhostCFrame = true
+                currentChar.HumanoidRootPart.CFrame = currentChar.HumanoidRootPart.CFrame - ghostOffset
+                isUpdatingGhostCFrame = false
                 
-                if workspace.CurrentCamera.CameraType ~= Enum.CameraType.Scriptable then
-                    workspace.CurrentCamera.CameraSubject = currentChar.Humanoid
+                local realHumanoid = currentChar:FindFirstChildOfClass("Humanoid")
+                if realHumanoid then
+                    workspace.CurrentCamera.CameraSubject = realHumanoid
                 end
             end
 
@@ -2737,6 +2778,7 @@ ghostToggle = PlayerTab:Toggle({
             if ghostSkyFolder then ghostSkyFolder:Destroy() ghostSkyFolder = nil end
             table.clear(ghostClonedParts)
             table.clear(partPairs)
+            lastKnownSkyPos = Vector3.zero
         end
     end
 })
