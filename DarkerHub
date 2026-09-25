@@ -1786,11 +1786,11 @@ SheriffTab:Toggle({
                         if part then
                             local posicaoOriginalArma = part.CFrame
                             part.CFrame = hrp.CFrame
-                            task.wait(0.01)
+                            task.wait()
                             if part then 
                                 part.CFrame = posicaoOriginalArma 
                             end
-                            task.wait(5)
+                            task.wait()
                         end
                     end
                 end
