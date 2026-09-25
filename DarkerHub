@@ -158,7 +158,20 @@ LocalPlayer.CharacterAdded:Connect(function()
     Coletadas = {}
 end)
 
-WindUI:SetTheme("Dark")
+-- Adiciona o tema com todas as chaves de cor especificadas
+WindUI:AddTheme({
+    Name = "My Theme",
+    Accent = Color3.fromRGB(24, 24, 27),        -- #18181b
+    Background = Color3.fromRGB(0, 0, 0),   -- #101010
+    Outline = Color3.fromRGB(255, 255, 255),    -- #FFFFFF
+    Text = Color3.fromRGB(255, 255, 255),       -- #FFFFFF
+    Placeholder = Color3.fromRGB(122, 122, 122),-- #7a7a7a
+    Button = Color3.fromRGB(140, 0, 0),        -- #52525b
+    Icon = Color3.fromRGB(161, 161, 170)        -- #a1a1aa
+})
+
+-- Aplica o tema criado
+WindUI:SetTheme("My Theme")
 
 -- TABS
 local InfoTab = Window:Tab({Title = "Info", Icon = "house"})
@@ -942,10 +955,10 @@ RunService.Stepped:Connect(function()
 end)
 
 ---------------------------------------------------------------------------
--- [ AUTO COIN COMPLETO - OFFSET Y + PAUSA TOTAL SEM TELEPORTE ]
+-- [ AUTO COIN - LÓGICA ORIGINAL CORRIGIDA (POSIÇÃO 0,0,0 E ANTI-BUG RESPAWN) ]
 ---------------------------------------------------------------------------
 local CoinsCache = {}
-local CoinQueue = {}
+local BlacklistedCoins = {}
 local currentCoinTween = nil
 local currentCoinTarget = nil
 local IsProcessingCoins = false
@@ -953,18 +966,20 @@ local ReevaluateRoute = false
 local coinAddedConnection = nil
 local coinRemovedConnection = nil
 
--- Valida se o objeto é uma moeda válida no mapa
+-- Valida se a moeda existe e não está na blacklist
 local function IsCoinValid(coin)
     return coin 
         and coin.Parent 
         and coin:IsA("BasePart")
         and coin.Transparency < 1 
         and coin:IsDescendantOf(workspace)
+        and not BlacklistedCoins[coin]
 end
 
--- Varre o mapa e atualiza o cache global de moedas
-local function UpdateCoinCache()
-    CoinsCache = {}
+-- Escaneamento completo do mapa
+local function InitialMapScan()
+    table.clear(CoinsCache)
+    table.clear(BlacklistedCoins) -- Limpa a blacklist ao escanear o mapa de novo
     local areaDeBusca = workspace:FindFirstChild("NormalMaps") or workspace:FindFirstChild("Map") or workspace
     for _, obj in ipairs(areaDeBusca:GetDescendants()) do
         if IsCoinValid(obj) then
@@ -979,40 +994,38 @@ local function UpdateCoinCache()
     end
 end
 
--- Mantém e ordena as 3 moedas mais próximas
-local function GetTop3Coins(centerPos)
-    local sorted = {}
+-- Função para pegar sempre a moeda mais perto
+local function GetNearestCoin(centerPos)
+    local nearest = nil
+    local minDist = math.huge
+    
     for coin in pairs(CoinsCache) do
         if IsCoinValid(coin) then
-            table.insert(sorted, {coin = coin, dist = (centerPos - coin.Position).Magnitude})
+            local dist = (centerPos - coin.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                nearest = coin
+            end
         else
             CoinsCache[coin] = nil
         end
     end
-    table.sort(sorted, function(a, b) return a.dist < b.dist end)
-    
-    local top3 = {}
-    for i = 1, math.min(3, #sorted) do
-        table.insert(top3, sorted[i].coin)
-    end
-    return top3
+    return nearest
 end
 
--- Evento: Se a moeda atual sumir, cancela voo e reavalia rota
+-- Evento: Moeda Sumiu
 if coinRemovedConnection then coinRemovedConnection:Disconnect() end
 coinRemovedConnection = workspace.DescendantRemoving:Connect(function(obj)
     if CoinsCache[obj] then
         CoinsCache[obj] = nil
         if currentCoinTarget == obj then
             ReevaluateRoute = true
-            if currentCoinTween then
-                currentCoinTween:Cancel()
-            end
+            if currentCoinTween then currentCoinTween:Cancel() end
         end
     end
 end)
 
--- Evento: Quando surge nova moeda mais próxima, redireciona a rota do voo
+-- Evento: Nova Moeda Nasceu
 if coinAddedConnection then coinAddedConnection:Disconnect() end
 coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
     if not AutoCoinEnabled then return end
@@ -1031,11 +1044,10 @@ coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
                         local currentDist = (hrp.Position - currentCoinTarget.Position).Magnitude
                         local newDist = (hrp.Position - obj.Position).Magnitude
                         
+                        -- Se nascer uma muito mais perto, recálcula a rota
                         if newDist < currentDist - 2 then
                             ReevaluateRoute = true
-                            if currentCoinTween then
-                                currentCoinTween:Cancel()
-                            end
+                            if currentCoinTween then currentCoinTween:Cancel() end
                         end
                     end
                 end
@@ -1044,13 +1056,15 @@ coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
--- Loop principal do Auto Coin
+-- Loop principal super protegido
 task.spawn(function()
     while true do
         task.wait(0.1)
         
         if AutoCoinEnabled and not IsProcessingCoins then
             IsProcessingCoins = true
+            
+            InitialMapScan()
             
             local noclipConn = nil
             local bv = nil
@@ -1060,66 +1074,59 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 local hum = char and char:FindFirstChild("Humanoid")
                 
+                -- Checa se está vivo usando pcall pra evitar erros caso a função falhe
                 local isAlive = true
                 if typeof(IsParticipatingAndAlive) == "function" then
-                    isAlive = IsParticipatingAndAlive(LocalPlayer)
+                    pcall(function() isAlive = IsParticipatingAndAlive(LocalPlayer) end)
                 end
                 
-                local matchStarted = (Murder ~= nil and Sheriff ~= nil)
-                
-                if not hrp or not hum or hum.Health <= 0 or not isAlive or not matchStarted then
+                -- SE ESTIVER MORTO, NO LOBBY, OU RESETOU:
+                if not hrp or not hum or hum.Health <= 0 or not isAlive then
                     if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
                     if bv then bv:Destroy() bv = nil end
                     if noclipConn then noclipConn:Disconnect() noclipConn = nil end
                     task.wait(0.5)
-                    continue
+                    continue -- Fica esperando você renascer pacientemente
                 end
                 
-                UpdateCoinCache()
-                CoinQueue = GetTop3Coins(hrp.Position)
+                ReevaluateRoute = false
+                local alvo = GetNearestCoin(hrp.Position)
                 
-                -- CASO NÃO HAJA MOEDAS NO MAPA:
-                if #CoinQueue == 0 then
-                    -- Desativa totalmente Voo e Noclip (solta o personagem na física normal)
+                -- SE ACABARAM AS MOEDAS:
+                if not alvo then
                     if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
                     if bv then bv:Destroy() bv = nil end
                     if noclipConn then noclipConn:Disconnect() noclipConn = nil end
                     
-                    -- Pausa e aguarda no local até que novas moedas surjam
+                    -- Fica escaneando até o novo mapa carregar ou nascer moeda
                     while AutoCoinEnabled do
-                        task.wait(0.2)
-                        char = LocalPlayer.Character
-                        hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        hum = char and char:FindFirstChild("Humanoid")
-                        if not hrp or not hum or hum.Health <= 0 then break end
-                        
-                        UpdateCoinCache()
-                        CoinQueue = GetTop3Coins(hrp.Position)
-                        if #CoinQueue > 0 then
-                            break -- Sai da pausa e retoma o farm
+                        task.wait(1)
+                        local currChar = LocalPlayer.Character
+                        local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
+                        if not currHrp or not currChar:FindFirstChild("Humanoid") or currChar.Humanoid.Health <= 0 then 
+                            break -- Se morrer enquanto espera, sai e volta pro inicio do loop
                         end
+                        
+                        InitialMapScan() 
+                        alvo = GetNearestCoin(currHrp.Position)
+                        if alvo then break end
                     end
-                    
                     continue
                 end
                 
-                local alvo = CoinQueue[1]
-                if not IsCoinValid(alvo) then
-                    CoinsCache[alvo] = nil
-                    continue
-                end
-                
-                -- Reativa Noclip e sustentação de Voo
+                -- NOCLIP CORRIGIDO (Pega o personagem ATUAL, e não o antigo)
                 if not noclipConn then
                     noclipConn = RunService.Stepped:Connect(function()
-                        if char then
-                            for _, part in ipairs(char:GetChildren()) do
+                        local cChar = LocalPlayer.Character
+                        if cChar then
+                            for _, part in ipairs(cChar:GetChildren()) do
                                 if part:IsA("BasePart") then part.CanCollide = false end
                             end
                         end
                     end)
                 end
                 
+                -- ANTI-GRAVIDADE
                 if not bv or bv.Parent ~= hrp then
                     if bv then bv:Destroy() end
                     bv = Instance.new("BodyVelocity")
@@ -1129,73 +1136,89 @@ task.spawn(function()
                 end
                 
                 currentCoinTarget = alvo
-                ReevaluateRoute = false
                 
-                -- Posição base da moeda
-                local spawnDestino = alvo.Position
+                -- POSIÇÃO EXATA DA MOEDA (Offset zerado como você pediu)
+                local destinoFinal = alvo.Position
                 if alvo.Parent and alvo.Parent:IsA("Model") and alvo.Parent.PrimaryPart then
-                    spawnDestino = alvo.Parent.PrimaryPart.Position
+                    destinoFinal = alvo.Parent.PrimaryPart.Position
                 elseif alvo.Name == "Coin_Sub" and alvo.Parent and alvo.Parent:FindFirstChild("Coin") then
-                    spawnDestino = alvo.Parent.Coin.Position
+                    destinoFinal = alvo.Parent.Coin.Position
                 end
                 
-                -- ELEVAÇÃO DE +2 STUDS NO EIXO Y (impede que o HumanoidRootPart afunde os pés no chão)
-                local destinoFinal = spawnDestino + Vector3.new(0, 2, 0)
                 local speed = (type(AutoCoinSpeed) == "number" and AutoCoinSpeed > 0) and AutoCoinSpeed or 25
                 local distanciaAtual = (hrp.Position - destinoFinal).Magnitude
                 local tempoViagem = math.max(0.05, distanciaAtual / speed)
                 
                 if currentCoinTween then currentCoinTween:Cancel() end
-                
                 currentCoinTween = TweenService:Create(
                     hrp, 
                     TweenInfo.new(tempoViagem, Enum.EasingStyle.Linear), 
-                    {CFrame = CFrame.new(destinoFinal)}
+                    {CFrame = CFrame.new(destinoFinal) * hrp.CFrame.Rotation}
                 )
-                
                 currentCoinTween:Play()
                 
-                -- Execução contínua do voo até o destino
+                -- TEMPO LIMITE / ANTI-TRAVAMENTO
+                local tempoLimite = tempoViagem + 1.5 
+                local tempoInicio = tick()
+                local travou = false
+                
                 while currentCoinTween and currentCoinTween.PlaybackState == Enum.PlaybackState.Playing do
                     RunService.Heartbeat:Wait()
                     
-                    if not AutoCoinEnabled or ReevaluateRoute then
+                    if not AutoCoinEnabled or ReevaluateRoute then break end
+                    
+                    -- Se alguém pegou a moeda no meio do caminho
+                    if not IsCoinValid(alvo) then
+                        ReevaluateRoute = true
+                        if currentCoinTween then currentCoinTween:Cancel() end
                         break
                     end
                     
-                    if not IsCoinValid(alvo) then
+                    -- Se você morreu no meio do caminho (alguém te matou)
+                    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character.Humanoid.Health <= 0 then
+                        ReevaluateRoute = true
+                        if currentCoinTween then currentCoinTween:Cancel() end
+                        break
+                    end
+                    
+                    -- Se o tempo limite estourou (você enroscou em algo impossível de passar)
+                    if tick() - tempoInicio > tempoLimite then
+                        travou = true
                         ReevaluateRoute = true
                         if currentCoinTween then currentCoinTween:Cancel() end
                         break
                     end
                 end
                 
-                if ReevaluateRoute or not AutoCoinEnabled then
-                    if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
+                if not AutoCoinEnabled then continue end
+                
+                -- Se a moeda ficou inalcançável (preso na parede)
+                if travou then
+                    BlacklistedCoins[alvo] = true
+                    CoinsCache[alvo] = nil
                     continue
                 end
                 
-                -- Chegou na moeda
-                if IsCoinValid(alvo) then
+                -- CHEGOU NA MOEDA (Espera ela coletar de fato)
+                if not ReevaluateRoute and IsCoinValid(alvo) then
                     CoinsCache[alvo] = nil
-                    
                     local tempoTotal = (type(TempoNaMoeda) == "number" and TempoNaMoeda > 0) and TempoNaMoeda or 0.2
                     local tStart = tick()
                     while tick() - tStart < tempoTotal and AutoCoinEnabled do
                         RunService.Heartbeat:Wait()
                         if ReevaluateRoute then break end
                     end
-                    
-                    UpdateCoinCache()
-                    CoinQueue = GetTop3Coins(hrp.Position)
                 end
             end
             
-            -- Limpeza completa das conexões e física
+            -- Limpeza geral ao desligar o Toggle
             if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
             if bv then bv:Destroy() bv = nil end
             if noclipConn then noclipConn:Disconnect() noclipConn = nil end
             
+            IsProcessingCoins = false
+        elseif not AutoCoinEnabled then
+            -- Garante que o script destrave se o Toggle for desligado bruscamente
             IsProcessingCoins = false
         end
     end
@@ -2437,7 +2460,6 @@ local function prepareGhostClone(model)
                 v.Transparency = 1
             else
                 v.Transparency = 0.5
-                v.LocalTransparencyModifier = 0
             end
         elseif v:IsA("Decal") or v:IsA("Texture") then
             v.Transparency = 0.5
@@ -2465,10 +2487,10 @@ local function addGhostTrail(cloneModel)
     trail.Name = "GhostTrail"
     trail.Attachment0 = att0
     trail.Attachment1 = att1
-    trail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)) -- Branco
-    trail.Transparency = NumberSequence.new(0.8) -- Transparência 0.8
-    trail.Lifetime = 0.2 -- 200 milésimos (0.2s)
-    trail.FaceCamera = false -- Mantém a trilha vertical
+    trail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+    trail.Transparency = NumberSequence.new(0.8)
+    trail.Lifetime = 0.2
+    trail.FaceCamera = false
     trail.Enabled = true
     trail.Parent = cloneModel
 end
@@ -2516,11 +2538,24 @@ ghostToggle = PlayerTab:Toggle({
             local hrp = char.HumanoidRootPart
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             ghostOffset = Vector3.new(10000, 1000, 10000)
-
             local initialCFrame = hrp.CFrame
 
+            -- Trava a Câmera na morte
             if humanoid then
                 ghostDiedConn = humanoid.Died:Connect(function()
+                    local cam = workspace.CurrentCamera
+                    local currentCamCFrame = cam.CFrame
+                    cam.CameraType = Enum.CameraType.Scriptable
+                    cam.CFrame = currentCamCFrame
+                    
+                    local respawnConn
+                    respawnConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
+                        local newHum = newChar:WaitForChild("Humanoid", 5)
+                        cam.CameraType = Enum.CameraType.Custom
+                        if newHum then cam.CameraSubject = newHum end
+                        respawnConn:Disconnect()
+                    end)
+
                     if ghostToggle and typeof(ghostToggle.SetValue) == "function" then
                         ghostToggle:SetValue(false)
                     elseif ghostToggle and typeof(ghostToggle.Set) == "function" then
@@ -2531,14 +2566,14 @@ ghostToggle = PlayerTab:Toggle({
                 end)
             end
 
-            -- 1. Cria o clone no exato milissegundo e na posição inicial
             char.Archivable = true
-            ghostClone = char:Clone()
             
+            ghostClone = char:Clone()
             local cloneHRP = ghostClone:FindFirstChild("HumanoidRootPart")
             if cloneHRP then 
                 ghostClone.PrimaryPart = cloneHRP 
                 cloneHRP.CFrame = initialCFrame
+                cloneHRP.Anchored = true 
             end
 
             prepareGhostClone(ghostClone)
@@ -2547,32 +2582,31 @@ ghostToggle = PlayerTab:Toggle({
             
             ghostClone.Parent = workspace
 
-            -- Teleporta o jogador para o céu
-            hrp.CFrame = initialCFrame + ghostOffset
-            
             ghostSkyFolder = Instance.new("Folder")
             ghostSkyFolder.Name = "SkyCollisionMap"
             ghostSkyFolder.Parent = workspace
 
-            local cloneHumanoid = ghostClone:FindFirstChildOfClass("Humanoid")
-            if cloneHumanoid then
-                workspace.CurrentCamera.CameraSubject = cloneHumanoid
+            -- Teleporta o personagem real pro céu
+            char:PivotTo(initialCFrame + ghostOffset)
+
+            local function enforceCloneCamera()
+                if not ghostModeActive or not ghostClone then return end
+                local cam = workspace.CurrentCamera
+                local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid") or ghostClone:FindFirstChild("HumanoidRootPart")
+                if targetSubject and cam.CameraSubject ~= targetSubject then
+                    cam.CameraSubject = targetSubject
+                end
             end
 
-            ghostCamConn = workspace.CurrentCamera:GetPropertyChangedSignal("CameraSubject"):Connect(function()
-                if ghostModeActive and ghostClone and ghostClone:FindFirstChildOfClass("Humanoid") then
-                    local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid")
-                    if workspace.CurrentCamera.CameraSubject ~= targetSubject then
-                        workspace.CurrentCamera.CameraSubject = targetSubject
-                    end
-                end
-            end)
+            enforceCloneCamera()
+
+            ghostCamConn = workspace.CurrentCamera:GetPropertyChangedSignal("CameraSubject"):Connect(enforceCloneCamera)
 
             ghostCharConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
                 if ghostModeActive then
                     task.wait(0.2)
                     local newHRP = newChar:WaitForChild("HumanoidRootPart", 5)
-                    if newHRP then newHRP.CFrame = newHRP.CFrame + ghostOffset end
+                    if newHRP then newChar:PivotTo(newHRP.CFrame + ghostOffset) end
                 end
             end)
 
@@ -2580,16 +2614,28 @@ ghostToggle = PlayerTab:Toggle({
             overlapParams.FilterType = Enum.RaycastFilterType.Exclude
             overlapParams.FilterDescendantsInstances = {char, ghostClone, ghostSkyFolder}
 
-            -- Sincronização ultra-fluida executada ANTES do cálculo de câmera
-            RunService:BindToRenderStep("GhostSyncVisual", Enum.RenderPriority.Camera.Value - 1, function()
+            -- LOOP 1: MOVIMENTAÇÃO E FORÇAMENTO DE CÂMERA (Executa antes da câmera atualizar)
+            RunService:BindToRenderStep("GhostSyncMovement", Enum.RenderPriority.Camera.Value - 1, function()
                 local currentChar = LocalPlayer.Character
                 if not ghostClone or not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
                 
                 local realHRP = currentChar.HumanoidRootPart
+                local cam = workspace.CurrentCamera
+                local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid")
 
-                -- Suporte ao Shift Lock (orientação por câmera sem interferir na física)
+                -- FORÇA A CÂMERA NO CLONE A CADA FRAME
+                if targetSubject and cam.CameraSubject ~= targetSubject then
+                    cam.CameraSubject = targetSubject
+                end
+
+                -- TELEPORTE: Mantém o personagem real no céu se o jogo teleportar pro chão
+                if realHRP.Position.Y < (ghostOffset.Y - 500) then
+                    currentChar:PivotTo(currentChar:GetPivot() + ghostOffset)
+                    return
+                end
+
                 if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-                    local camCFrame = workspace.CurrentCamera.CFrame
+                    local camCFrame = cam.CFrame
                     local lookVector = camCFrame.LookVector
                     local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
                     if flatLook.Magnitude > 0.001 then
@@ -2597,14 +2643,27 @@ ghostToggle = PlayerTab:Toggle({
                     end
                 end
 
-                -- Atualização fluida das partes do clone
                 for realPart, clonePart in pairs(partPairs) do
                     if realPart and realPart.Parent and clonePart and clonePart.Parent then
                         clonePart.CFrame = realPart.CFrame - ghostOffset
-                        if clonePart.Name ~= "HumanoidRootPart" and clonePart.Name ~= "CollisionBox" then
-                            clonePart.LocalTransparencyModifier = 0
-                            clonePart.Transparency = 0.5
+                    end
+                end
+            end)
+
+            -- LOOP 2: VISIBILIDADE (Roda na última prioridade pós-câmera para não ocultar a cabeça)
+            RunService:BindToRenderStep("GhostSyncVisibility", Enum.RenderPriority.Last.Value, function()
+                if not ghostClone then return end
+                for _, v in ipairs(ghostClone:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        if v.Name == "HumanoidRootPart" or v.Name == "CollisionBox" then
+                            v.Transparency = 1
+                            v.LocalTransparencyModifier = 1
+                        else
+                            v.Transparency = 0.5
+                            v.LocalTransparencyModifier = 1-- Impede a câmera de deixar a cabeça invisível
                         end
+                    elseif v:IsA("Decal") or v:IsA("Texture") then
+                        v.Transparency = 0.5
                     end
                 end
             end)
@@ -2658,18 +2717,19 @@ ghostToggle = PlayerTab:Toggle({
                 end
             end)
         else
-            RunService:UnbindFromRenderStep("GhostSyncVisual")
+            RunService:UnbindFromRenderStep("GhostSyncMovement")
+            RunService:UnbindFromRenderStep("GhostSyncVisibility")
             if ghostMapLoop then ghostMapLoop:Disconnect() ghostMapLoop = nil end
             if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
             if ghostCharConn then ghostCharConn:Disconnect() ghostCharConn = nil end
             if ghostDiedConn then ghostDiedConn:Disconnect() ghostDiedConn = nil end
             
             local currentChar = LocalPlayer.Character
-            if currentChar and currentChar:FindFirstChild("HumanoidRootPart") then
-                currentChar.HumanoidRootPart.CFrame = currentChar.HumanoidRootPart.CFrame - ghostOffset
-                local realHumanoid = currentChar:FindFirstChildOfClass("Humanoid")
-                if realHumanoid then
-                    workspace.CurrentCamera.CameraSubject = realHumanoid
+            if currentChar and currentChar:FindFirstChild("HumanoidRootPart") and currentChar:FindFirstChild("Humanoid") and currentChar.Humanoid.Health > 0 then
+                currentChar:PivotTo(currentChar:GetPivot() - ghostOffset)
+                
+                if workspace.CurrentCamera.CameraType ~= Enum.CameraType.Scriptable then
+                    workspace.CurrentCamera.CameraSubject = currentChar.Humanoid
                 end
             end
 
