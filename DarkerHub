@@ -330,7 +330,7 @@ task.spawn(function()
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     
                     if hrp then
-                        hrp.Size = Vector3.new(10, 5, 10)
+                        hrp.Size = Vector3.new(20, 5, 20)
                         hrp.Transparency = 1
                         hrp.CanCollide = false
                     end
@@ -1893,6 +1893,97 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 EspTab:Toggle({Title = "ESP Players", Default = false, Callback = function(v) EspEnabled = v end})
+
+local EspUsernameEnabled = false
+
+EspTab:Toggle({
+    Title = "ESP username players",
+    Default = false,
+    Callback = function(v)
+        EspUsernameEnabled = v
+        if not v then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character and p.Character:FindFirstChild("EspUsernameGui") then
+                    p.Character.EspUsernameGui:Destroy()
+                end
+            end
+        end
+    end
+})
+
+RunService.RenderStepped:Connect(function()
+    if not EspUsernameEnabled then return end
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local char = p.Character
+            
+            if char then
+                local head = char:FindFirstChild("Head")
+                local targetRoot = char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char:FindFirstChild("Humanoid")
+                
+                -- Checagem nativa do Roblox para ver se o jogador está vivo
+                local isAlive = humanoid and humanoid.Health > 0
+                
+                if head and targetRoot and isAlive then
+                    local gui = char:FindFirstChild("EspUsernameGui")
+                    
+                    -- Se o jogador renasceu e não tem o GUI, cria um novo
+                    if not gui then
+                        gui = Instance.new("BillboardGui")
+                        gui.Name = "EspUsernameGui"
+                        gui.Adornee = head
+                        gui.Size = UDim2.new(0, 200, 0, 50)
+                        gui.StudsOffset = Vector3.new(0, 2.5, 0)
+                        gui.AlwaysOnTop = true
+                        gui.Parent = char
+                        
+                        local textLabel = Instance.new("TextLabel")
+                        textLabel.Name = "NameLabel"
+                        textLabel.Size = UDim2.new(1, 0, 1, 0)
+                        textLabel.BackgroundTransparency = 1
+                        textLabel.Font = Enum.Font.GothamBold
+                        textLabel.TextSize = 12
+                        textLabel.TextTransparency = 0.25 
+                        textLabel.TextStrokeTransparency = 0 
+                        textLabel.Parent = gui
+                    end
+                    
+                    local distance = myRoot and math.floor((myRoot.Position - targetRoot.Position).Magnitude) or 0
+                    local label = gui:FindFirstChild("NameLabel")
+                    
+                    if label then
+                        label.Text = p.Name .. "\n" .. distance .. " M"
+                        
+                        -- Verifica a role com segurança para não quebrar o loop
+                        local success, role = pcall(function() return GetPlayerRole(p) end)
+                        if not success then role = "Innocent" end
+                        
+                        if role == "Murderer" then
+                            label.TextColor3 = Color3.fromRGB(255, 0, 0)
+                            label.TextStrokeColor3 = Color3.fromRGB(80, 0, 0)
+                        elseif role == "Sheriff" then
+                            label.TextColor3 = Color3.fromRGB(0, 0, 255)
+                            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 80)
+                        else
+                            label.TextColor3 = Color3.fromRGB(0, 255, 0)
+                            label.TextStrokeColor3 = Color3.fromRGB(0, 80, 0)
+                        end
+                    end
+                else
+                    -- Limpa o GUI antigo se o jogador morrer
+                    local gui = char:FindFirstChild("EspUsernameGui")
+                    if gui then gui:Destroy() end
+                end
+            end
+        end
+    end
+end)
+
 EspTab:Toggle({Title = "ESP Gun", Default = false, Callback = function(v) GunEspEnabled = v end})
 
 local coinConnection = nil
@@ -2422,6 +2513,103 @@ PerformanceTab:Toggle({
         TogglePingGui(v)
     end
 })
+
+-- ====================================================
+-- SYSTEM: FAST ROLE REVEAL
+-- ====================================================
+local TweenService = game:GetService("TweenService")
+local FastRoleEnabled = false
+local lastMatchState = false
+
+-- Toggle na Tab Info (Nome traduzido para inglês)
+InfoTab:Toggle({
+    Title = "Fast Role Reveal", 
+    Default = false, 
+    Callback = function(v) 
+        FastRoleEnabled = v 
+    end
+})
+
+-- Função para criar e mostrar o texto na tela
+local function ShowFastRole(role)
+    -- Remove o texto antigo caso exista
+    if LocalPlayer.PlayerGui:FindFirstChild("FastRoleGui") then
+        LocalPlayer.PlayerGui.FastRoleGui:Destroy()
+    end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "FastRoleGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 9999 -- Garante que vai aparecer na frente de tudo do jogo
+    screenGui.Parent = LocalPlayer.PlayerGui
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.Position = UDim2.new(0, 0, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = Enum.Font.GothamBold -- Fonte Gotham Sans Bold
+    textLabel.TextSize = 30
+    textLabel.Text = "YOU ARE " .. string.upper(role)
+    textLabel.TextStrokeTransparency = 0 -- Borda preta
+    textLabel.TextTransparency = 0 -- Começa totalmente visível
+
+    -- Define as cores de acordo com a role
+    if role == "Murderer" then
+        textLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Vermelho
+    elseif role == "Sheriff" then
+        textLabel.TextColor3 = Color3.fromRGB(0, 0, 255) -- Azul
+    else
+        textLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Verde (Innocent / Hero)
+    end
+
+    textLabel.Parent = screenGui
+
+    -- Começa a aumentar a transparência exatos 3 segundos depois de aparecer na tela
+    task.delay(3, function()
+        -- Cria a animação para a transparência ir até 1 (levando 2 segundos para sumir lentamente)
+        local fadeInfo = TweenInfo.new(2, Enum.EasingStyle.Linear)
+        local fadeTween = TweenService:Create(textLabel, fadeInfo, {
+            TextTransparency = 1, 
+            TextStrokeTransparency = 1
+        })
+        
+        fadeTween:Play()
+        
+        -- Assim que chegar em 1 (terminar a animação), apaga totalmente a GUI do jogo
+        fadeTween.Completed:Wait()
+        if screenGui then 
+            screenGui:Destroy() 
+        end
+    end)
+end
+
+-- Loop de verificação rápida
+task.spawn(function()
+    while task.wait(0.2) do
+        if FastRoleEnabled then
+            local inMatchNow = false
+            
+            -- Checa se o seu nome está na lista de vivos da rodada
+            if roles and roles[LocalPlayer.Name] then
+                local myData = roles[LocalPlayer.Name]
+                if not myData.Killed and not myData.Dead then
+                    inMatchNow = true
+                end
+            end
+
+            -- Se você não estava em partida e de repente entrou, ele revela instantaneamente
+            if inMatchNow and not lastMatchState then
+                local myRole = GetPlayerRole(LocalPlayer)
+                ShowFastRole(myRole)
+            end
+            
+            lastMatchState = inMatchNow
+        else
+            lastMatchState = false
+        end
+    end
+end)
 
 -- ==========================================
 -- SERVICES
