@@ -767,83 +767,114 @@ local function ToggleShootButtonGui(enable)
             end
         end)
 
-        ShootButton.MouseButton1Down:Connect(function()
-            if ShootDragActive then return end
-            local Character = LocalPlayer.Character
-            local Backpack = LocalPlayer:FindFirstChild("Backpack")
-            if not Character or not Backpack then return end
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-            local gunInBackpack = Backpack:FindFirstChild("Gun")
-            local gunInChar = Character:FindFirstChild("Gun")
-            local gun = gunInChar or gunInBackpack
+-- ==========================================================
+-- 1. SISTEMA DE TIRO GUIADO (Redireciona a bala em tempo real)
+-- ==========================================================
+local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        -- Se a bala sumiu ou o Murderer morreu, para de guiar
+        if not bulletPart or not bulletPart.Parent or not murdererChar or not murdererChar:FindFirstChild("HumanoidRootPart") then
+            if connection then connection:Disconnect() end
+            return
+        end
 
-            if gun then
-                if gun.Parent == Backpack then
-                    gun.Parent = Character
-                    
-                    task.delay(0.05, function()
-                        if gun and gun.Parent == Character then
-                            gun.Parent = Backpack
-                        end
-                    end)
-                else
-                    task.delay(0.05, function()
-                        if gun and gun.Parent == Character then
-                            gun.Parent = Backpack
-                        end
-                    end)
-                end
-
-                task.wait(0.005)
-
-                local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
-                if not murderer or not murderer.Character then return end
-
-                local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
-                    or murderer.Character:FindFirstChild("UpperTorso") 
-                    or murderer.Character:FindFirstChild("Torso")
-                local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
-                local myRoot = Character:FindFirstChild("HumanoidRootPart")
-                
-                if targetPart and humanoid and humanoid.Health > 0 and myRoot then
-                    local shootEvent = gun:FindFirstChild("Shoot")
-                    
-                    if shootEvent and shootEvent:IsA("RemoteEvent") then
-                        local originPos = myRoot.Position
-                        local targetPos = targetPart.Position
-                        
-                        local bulletSpeed = 250
-                        local distance = (targetPos - originPos).Magnitude
-                        
-                        local rawPing = LocalPlayer:GetNetworkPing()
-                        local ping = (rawPing > 0) and rawPing or 0.05
-                        
-                        local travelTime = (distance / bulletSpeed) + ping
-                        
-                        local velocity = targetPart.AssemblyLinearVelocity
-                        local correctedTargetPos = targetPos
-                        
-                        if velocity.Magnitude > 1.5 and velocity.Magnitude < 100 then
-                            correctedTargetPos = targetPos + (velocity * travelTime)
-                        end
-                        
-                        local realOrigin = CFrame.new(originPos, correctedTargetPos)
-                        local realTarget = CFrame.new(correctedTargetPos)
-                        
-                        shootEvent:FireServer(realOrigin, realTarget)
-
-                        task.spawn(function()
-                            for i = 1, 5 do
-                                if typeof(PararAnimacoesDeTiro) == "function" then
-                                    PararAnimacoesDeTiro(Character)
-                                end
-                                game:GetService("RunService").Heartbeat:Wait()
-                            end
-                        end)
-                    end
-                end
+        local targetPart = murdererChar:FindFirstChild("HumanoidRootPart") 
+            or murdererChar:FindFirstChild("UpperTorso") 
+            or murdererChar:FindFirstChild("Head")
+            
+        if targetPart then
+            local currentBulletPos = bulletPart.Position
+            local liveTargetPos = targetPart.Position
+            
+            -- Recalcula a direção exata para a posição ATUAL do Murderer a cada frame
+            local direction = (liveTargetPos - currentBulletPos)
+            local distance = direction.Magnitude
+            
+            if distance > 2 then
+                -- Move a bala na direção do Murderer ajustando a rota instantaneamente
+                local speed = 15 -- Velocidade de atração da bala
+                bulletPart.CFrame = CFrame.new(currentBulletPos + (direction.Unit * math.min(speed, distance)), liveTargetPos)
+            else
+                -- Quando estiver colado nele, força o registro de impacto
+                bulletPart.CFrame = CFrame.new(liveTargetPos)
+                pcall(function()
+                    firetouchinterest(targetPart, bulletPart, 0)
+                    task.wait()
+                    firetouchinterest(targetPart, bulletPart, 1)
+                end)
+                if connection then connection:Disconnect() end
             end
-        end)
+        end
+    end)
+end
+
+-- Monitora quando a bala da arma é criada no mapa
+Workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Bullet" or child.Name == "Ray" or child.Name:lower():find("bullet") then
+        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+        if murderer and murderer.Character then
+            GuiarBalaEmTempoReal(child, murderer.Character)
+        end
+    end
+end)
+
+-- ==========================================================
+-- 2. SEU BOTÃO SHOOT (Atira normal e ativa a bala)
+-- ==========================================================
+ShootButton.MouseButton1Down:Connect(function()
+    if ShootDragActive then return end
+    local Character = LocalPlayer.Character
+    local Backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not Character or not Backpack then return end
+
+    local gunInBackpack = Backpack:FindFirstChild("Gun")
+    local gunInChar = Character:FindFirstChild("Gun")
+    local gun = gunInChar or gunInBackpack
+
+    if gun then
+        if gun.Parent == Backpack then
+            gun.Parent = Character
+        end
+
+        task.wait(0.005)
+
+        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+        if not murderer or not murderer.Character then return end
+
+        local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
+            or murderer.Character:FindFirstChild("UpperTorso")
+        local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
+        local myRoot = Character:FindFirstChild("HumanoidRootPart")
+        
+        if targetPart and humanoid and humanoid.Health > 0 and myRoot then
+            local shootEvent = gun:FindFirstChild("Shoot")
+            
+            if shootEvent and shootEvent:IsA("RemoteEvent") then
+                local originPos = myRoot.Position + Vector3.new(0, 1.5, 0)
+                local targetPos = targetPart.Position
+                
+                local realOrigin = CFrame.new(originPos, targetPos)
+                local realTarget = CFrame.new(targetPos)
+                
+                -- Atira na direção inicial; o listener do Workspace assume o controle assim que a bala nascer
+                shootEvent:FireServer(realOrigin, realTarget)
+
+                task.spawn(function()
+                    for i = 1, 5 do
+                        if typeof(PararAnimacoesDeTiro) == "function" then
+                            PararAnimacoesDeTiro(Character)
+                        end
+                        game:GetService("RunService").Heartbeat:Wait()
+                    end
+                end)
+            end
+        end
+    end
+end)
 
         ShootButtonGui = ScreenGui
         UpdateShootButtonState()
@@ -1462,11 +1493,18 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
+LocalPlayer.CharacterAdded:Connect(function()
+    FlingActive = false
+end)
+
 local function ExecutarMecanismoFling(TargetPlayer)
     if not TargetPlayer then return end
+    
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local root = hum and hum.RootPart
+    
+    if not char or not hum or hum.Health <= 0 or not root then return end
     
     local tChar = TargetPlayer.Character
     if not tChar then return end
@@ -1477,26 +1515,28 @@ local function ExecutarMecanismoFling(TargetPlayer)
     local acc = tChar:FindFirstChildOfClass("Accessory")
     local handle = acc and acc:FindFirstChild("Handle")
     
-    if char and hum and root then
-        if root.Velocity.Magnitude < 50 then
-            getgenv().OldPos = root.CFrame
-        end
-        if tHum and tHum.Sit then return end
-        
+    if tHum and tHum.Sit then return end
+    if not tChar:FindFirstChildWhichIsA("BasePart") then return end
+
+    if root.Velocity.Magnitude < 50 then
+        getgenv().OldPos = root.CFrame
+    end
+    
+    local animScript = char:FindFirstChild("Animate")
+    local animator = hum:FindFirstChildOfClass("Animator")
+    
+    pcall(function()
         if tHead then workspace.CurrentCamera.CameraSubject = tHead
         elseif handle then workspace.CurrentCamera.CameraSubject = handle
         elseif tHum and tRoot then workspace.CurrentCamera.CameraSubject = tHum end
         
-        if not tChar:FindFirstChildWhichIsA("BasePart") then return end
-        
-        local animScript = char:FindFirstChild("Animate")
         if animScript then animScript.Disabled = true end
-        local animator = hum:FindFirstChildOfClass("Animator")
         if animator then
             for _, track in ipairs(animator:GetPlayingAnimationTracks()) do track:Stop() end
         end
         
         local FPos = function(targetPosition, rotationAngle)
+            if not root or not root.Parent or not hum or hum.Health <= 0 then return end
             local posicaoFinal = targetPosition + Vector3.new(0, 2, 0)
             local finalCFrame = CFrame.new(posicaoFinal) * CFrame.Angles(math.rad(rotationAngle), 0, 0)
             
@@ -1519,7 +1559,7 @@ local function ExecutarMecanismoFling(TargetPlayer)
             local currentAngle = 0
             
             repeat
-                if root and BasePart and BasePart.Parent then
+                if root and root.Parent and hum and hum.Health > 0 and BasePart and BasePart.Parent then
                     if BasePart.AssemblyLinearVelocity.Magnitude > 250 then break end
                     local dt = task.wait()
                     
@@ -1566,13 +1606,13 @@ local function ExecutarMecanismoFling(TargetPlayer)
                 else
                     break
                 end
-            until tick() > Time + TimeToWait or not FlingActive
+            until tick() > Time + TimeToWait or not FlingActive or not hum or hum.Health <= 0
         end
         
         workspace.FallenPartsDestroyHeight = 0/0
         local BV = Instance.new("BodyVelocity")
         BV.Parent = root
-        BV.Velocity = Vector3.new(0, 0, 0)
+        BV.Velocity = Vector3.zero
         BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
         
@@ -1581,11 +1621,13 @@ local function ExecutarMecanismoFling(TargetPlayer)
         elseif handle then SFBasePart(handle) end
         
         BV:Destroy()
-        hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-        workspace.CurrentCamera.CameraSubject = hum
-        if animScript then animScript.Disabled = false end
+        if hum and hum.Parent then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+            workspace.CurrentCamera.CameraSubject = hum
+        end
+        if animScript and animScript.Parent then animScript.Disabled = false end
         
-        if getgenv().OldPos then
+        if getgenv().OldPos and root and root.Parent and hum and hum.Health > 0 then
             local t = 0
             repeat
                 root.CFrame = getgenv().OldPos * CFrame.new(0, .5, 0)
@@ -1597,8 +1639,14 @@ local function ExecutarMecanismoFling(TargetPlayer)
                 task.wait()
                 t = t + 1
             until (root.Position - getgenv().OldPos.p).Magnitude < 25 or t > 10
-            workspace.FallenPartsDestroyHeight = getgenv().FPDH
         end
+    end)
+
+    workspace.FallenPartsDestroyHeight = getgenv().FPDH or -500
+    local myChar = LocalPlayer.Character
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    if myHum then
+        workspace.CurrentCamera.CameraSubject = myHum
     end
 end
 
@@ -1625,10 +1673,9 @@ RunService.RenderStepped:Connect(function()
     end
 
     UpdateESP()
-
     local gun = FindDroppedGun()
     if gun and GunEspEnabled then
-        local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
+        local part = gun:IsA("BasePart") and gun or gun:FindFirstWhichIsA("BasePart")
         if part then
             local highlight = gun:FindFirstChild("GunHighlight")
             if not highlight then
@@ -1646,7 +1693,7 @@ RunService.RenderStepped:Connect(function()
                 gui = Instance.new("BillboardGui")
                 gui.Name = "GunGui"
                 gui.Adornee = part
-                gui.Size = UDim2.new(0, 100, 0, 30)
+                gui.Size = UDim2.new(0, 150, 0, 40)
                 gui.StudsOffset = Vector3.new(0, 2, 0)
                 gui.AlwaysOnTop = true
                 gui.Parent = gun
@@ -1655,17 +1702,26 @@ RunService.RenderStepped:Connect(function()
                 label.Name = "GunLabel"
                 label.Size = UDim2.new(1, 0, 1, 0)
                 label.BackgroundTransparency = 1
-                label.Text = "GUN"
                 label.TextColor3 = Color3.fromRGB(255, 255, 0)
-                label.TextSize = 14
-                label.Font = Enum.Font.SourceSansBold
+                label.TextStrokeColor3 = Color3.fromRGB(255, 255, 0)
                 label.TextStrokeTransparency = 0
+                label.RichText = true
+                textLabel.Font = Enum.Font.GothamBold
                 label.Parent = gui
+            end
+
+            local label = gui:FindFirstChild("GunLabel")
+            if label then
+                local myChar = LocalPlayer.Character
+                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local distance = myRoot and math.floor((myRoot.Position - part.Position).Magnitude) or 0
+                
+                label.Text = '<font size="12">GUN DROPPED</font>\n<font size="10">' .. distance .. 'M</font>'
             end
         end
     end
-end)
-
+end) 
+    
 ---------------------------------------------------------------------------
 -- [ TABS E INTERFACES ]
 ---------------------------------------------------------------------------
@@ -1784,13 +1840,12 @@ SheriffTab:Toggle({
                     if hrp and gun then
                         local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
                         if part then
-                            local posicaoOriginalArma = part.CFrame
-                            part.CFrame = hrp.CFrame
-                            task.wait()
-                            if part then 
-                                part.CFrame = posicaoOriginalArma 
-                            end
-                            task.wait()
+                            pcall(function()
+                                -- Simula a colisão de toque entre o HumanoidRootPart e a arma
+                                firetouchinterest(hrp, part, 0)
+                                task.wait()
+                                firetouchinterest(hrp, part, 1)
+                            end)
                         end
                     end
                 end
@@ -1826,9 +1881,6 @@ SheriffTab:Button({
     end
 })
 
----------------------------------------------------------------------------
--- [ TAB FLING ]
----------------------------------------------------------------------------
 FlingTab:Button({
     Title = "Fling murderer",
     Callback = function()
@@ -1836,7 +1888,10 @@ FlingTab:Button({
         local target = GetPlayerByRole("Murderer")
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             FlingActive = true
-            task.spawn(function() ExecutarMecanismoFling(target); FlingActive = false end)
+            task.spawn(function()
+                pcall(function() ExecutarMecanismoFling(target) end)
+                FlingActive = false
+            end)
         end
     end
 })
@@ -1848,7 +1903,10 @@ FlingTab:Button({
         local target = GetPlayerByRole("Sheriff")
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             FlingActive = true
-            task.spawn(function() ExecutarMecanismoFling(target); FlingActive = false end)
+            task.spawn(function()
+                pcall(function() ExecutarMecanismoFling(target) end)
+                FlingActive = false
+            end)
         end
     end
 })
@@ -1868,7 +1926,10 @@ FlingTab:Button({
             local target = Players:FindFirstChild(SelectedPlayerToFling)
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 FlingActive = true
-                task.spawn(function() ExecutarMecanismoFling(target); FlingActive = false end)
+                task.spawn(function()
+                    pcall(function() ExecutarMecanismoFling(target) end)
+                    FlingActive = false
+                end)
             end
         end
     end
@@ -2072,8 +2133,8 @@ TeleportTab:Button({
     end
 })
 
-TeleportTab:Button({Title = "Atualizar Lista", Callback = function() AtualizarTodasAsListas() end})
-TeleportTab:Button({Title = "TP Área Segura", Callback = function() TeleportToSafeArea() end})
+TeleportTab:Button({Title = "Update list", Callback = function() AtualizarTodasAsListas() end})
+TeleportTab:Button({Title = "TP Safe zone", Callback = function() TeleportToSafeArea() end})
 
 TeleportTab:Button({
     Title = "TP Lobby",
@@ -2131,7 +2192,7 @@ TeleportTab:Button({
 })
 
 TeleportTab:Button({
-    Title = "TP Arma Dropada",
+    Title = "TP Gun",
     Callback = function()
         local gun = FindDroppedGun()
         if gun then
