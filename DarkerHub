@@ -42,7 +42,7 @@ pcall(function()
 
         -- Corta as pontas quadradas para respeitar a borda do menu
         local uiCorner = Instance.new("UICorner")
-        uiCorner.CornerRadius = UDim.new(0, 10) -- Arredondamento perfeito das bordas
+        uiCorner.CornerRadius = UDim.new(0, 15) -- Arredondamento perfeito das bordas
         uiCorner.Parent = bgImage
     end
 end)
@@ -1744,7 +1744,7 @@ RunService.RenderStepped:Connect(function()
                 local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
                 local distance = myRoot and math.floor((myRoot.Position - part.Position).Magnitude) or 0
                 
-                label.Text = '<font size="12">GUN DROPPED</font>\n<font size="10">' .. distance .. 'M</font>'
+                label.Text = '<font size="12">GUN DROPPED</font>\n<font size="12">' .. distance .. 'M</font>'
             end
         end
     end
@@ -1855,31 +1855,34 @@ SheriffTab:Toggle({
     Default = false, 
     Callback = function(v)
         AutoCollectGunEnabled = v
-        task.spawn(function()
-            while AutoCollectGunEnabled do
-                local myRole = GetPlayerRole(LocalPlayer)
-                local isAliveAndParticipating = IsParticipatingAndAlive(LocalPlayer)
-                
-                if myRole == "Innocent" and isAliveAndParticipating then
+        if AutoCollectGunEnabled then
+            task.spawn(function()
+                while AutoCollectGunEnabled do
+                    task.wait(0.1)
                     local char = LocalPlayer.Character
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    local gun = FindDroppedGun()
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
                     
-                    if hrp and gun then
-                        local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
-                        if part then
-                            pcall(function()
-                                -- Simula a colisão de toque entre o HumanoidRootPart e a arma
-                                firetouchinterest(hrp, part, 0)
-                                task.wait()
-                                firetouchinterest(hrp, part, 1)
-                            end)
+                    if char and hrp and hum and hum.Health > 0 then
+                        local hasGun = char:FindFirstChild("Gun") or (LocalPlayer:FindFirstChild("Backpack") and LocalPlayer.Backpack:FindFirstChild("Gun"))
+                        
+                        if not hasGun then
+                            local gun = FindDroppedGun()
+                            if gun then
+                                local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart")
+                                if part then
+                                    pcall(function()
+                                        firetouchinterest(hrp, part, 0)
+                                        task.wait()
+                                        firetouchinterest(hrp, part, 1)
+                                    end)
+                                end
+                            end
                         end
                     end
                 end
-                task.wait()
-            end
-        end)
+            end)
+        end
     end
 })
 
@@ -2127,7 +2130,7 @@ TeleportTab:Button({
     Callback = function()
         local target = GetPlayerByRole("Murderer")
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,3,0))
+            TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,0))
         end
     end
 })
@@ -2137,7 +2140,7 @@ TeleportTab:Button({
     Callback = function()
         local target = GetPlayerByRole("Sheriff")
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,3,0))
+            TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,0))
         end
     end
 })
@@ -2155,7 +2158,7 @@ TeleportTab:Button({
         if SelectedPlayerToTp ~= "" then
             local target = Players:FindFirstChild(SelectedPlayerToTp)
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,3,0))
+                TeleportToCFrame(target.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,0))
             end
         end
     end
@@ -2718,16 +2721,18 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================
 local ghostModeActive = false
 local canMoveButton = false
-local ghostMapLoop = nil
 local ghostCamConn = nil
 local ghostCharConn = nil
 local ghostDiedConn = nil
 local ghostCFrameConn = nil
 local ghostClone = nil
-local ghostSkyFolder = nil
 local ghostClonedParts = {}
 local ghostOffset = Vector3.new(10000, 1000, 10000)
 local partPairs = {}
+
+local ghostSkyFolder = workspace:FindFirstChild("SkyCollisionMap") or Instance.new("Folder")
+ghostSkyFolder.Name = "SkyCollisionMap"
+ghostSkyFolder.Parent = workspace
 
 local lastKnownSkyPos = Vector3.zero
 local isUpdatingGhostCFrame = false
@@ -2882,10 +2887,6 @@ local function setGhostState(state)
 
         hrp.CFrame = initialCFrame + ghostOffset
         lastKnownSkyPos = hrp.Position
-        
-        ghostSkyFolder = Instance.new("Folder")
-        ghostSkyFolder.Name = "SkyCollisionMap"
-        ghostSkyFolder.Parent = workspace
 
         local cloneHumanoid = ghostClone:FindFirstChildOfClass("Humanoid")
         if cloneHumanoid then
@@ -2918,10 +2919,6 @@ local function setGhostState(state)
             end
         end)
 
-        local overlapParams = OverlapParams.new()
-        overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-        overlapParams.FilterDescendantsInstances = {char, ghostClone, ghostSkyFolder}
-
         RunService:BindToRenderStep("GhostSyncVisual", Enum.RenderPriority.Camera.Value - 1, function()
             local currentChar = LocalPlayer.Character
             if not ghostClone or not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
@@ -2949,58 +2946,8 @@ local function setGhostState(state)
                 end
             end
         end)
-
-        local lastTick = 0
-        ghostMapLoop = RunService.Heartbeat:Connect(function()
-            local now = tick()
-            if now - lastTick < 0.05 then return end 
-            lastTick = now
-
-            local currentChar = LocalPlayer.Character
-            if not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
-            
-            local groundPos = currentChar.HumanoidRootPart.Position - ghostOffset
-            local partsNear = workspace:GetPartBoundsInRadius(groundPos, 20, overlapParams)
-            local neededParts = {}
-
-            for _, part in ipairs(partsNear) do
-                if part.CanCollide then
-                    neededParts[part] = true
-                    
-                    local proxy = ghostClonedParts[part]
-                    if not proxy then
-                        local oldArch = part.Archivable
-                        part.Archivable = true
-                        proxy = part:Clone()
-                        part.Archivable = oldArch
-
-                        if proxy then
-                            proxy:ClearAllChildren()
-                            proxy.CFrame = part.CFrame + ghostOffset
-                            proxy.Anchored = true
-                            proxy.CanCollide = true
-                            proxy.Transparency = 1
-                            proxy.Parent = ghostSkyFolder
-                            ghostClonedParts[part] = proxy
-                        end
-                    else
-                        if proxy.CFrame ~= part.CFrame + ghostOffset then
-                            proxy.CFrame = part.CFrame + ghostOffset
-                        end
-                    end
-                end
-            end
-
-            for origPart, proxyPart in pairs(ghostClonedParts) do
-                if not neededParts[origPart] then
-                    proxyPart:Destroy()
-                    ghostClonedParts[origPart] = nil
-                end
-            end
-        end)
     else
         RunService:UnbindFromRenderStep("GhostSyncVisual")
-        if ghostMapLoop then ghostMapLoop:Disconnect() ghostMapLoop = nil end
         if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
         if ghostCharConn then ghostCharConn:Disconnect() ghostCharConn = nil end
         if ghostDiedConn then ghostDiedConn:Disconnect() ghostDiedConn = nil end
@@ -3019,12 +2966,68 @@ local function setGhostState(state)
         end
 
         if ghostClone then ghostClone:Destroy() ghostClone = nil end
-        if ghostSkyFolder then ghostSkyFolder:Destroy() ghostSkyFolder = nil end
-        table.clear(ghostClonedParts)
         table.clear(partPairs)
         lastKnownSkyPos = Vector3.zero
     end
 end
+
+-- ==========================================
+-- CONTINUOUS MAP CLONING LOOP (BACKGROUND)
+-- ==========================================
+local lastMapTick = 0
+RunService.Heartbeat:Connect(function()
+    local now = tick()
+    if now - lastMapTick < 0.05 then return end 
+    lastMapTick = now
+
+    local currentChar = LocalPlayer.Character
+    if not currentChar or not currentChar:FindFirstChild("HumanoidRootPart") then return end
+    
+    local hrpPos = currentChar.HumanoidRootPart.Position
+    local groundPos = ghostModeActive and (hrpPos - ghostOffset) or hrpPos
+
+    local overlapParams = OverlapParams.new()
+    overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+    overlapParams.FilterDescendantsInstances = {currentChar, ghostClone or false, ghostSkyFolder}
+
+    local partsNear = workspace:GetPartBoundsInRadius(groundPos, 20, overlapParams)
+    local neededParts = {}
+
+    for _, part in ipairs(partsNear) do
+        if part.CanCollide then
+            neededParts[part] = true
+            
+            local proxy = ghostClonedParts[part]
+            if not proxy then
+                local oldArch = part.Archivable
+                part.Archivable = true
+                proxy = part:Clone()
+                part.Archivable = oldArch
+
+                if proxy then
+                    proxy:ClearAllChildren()
+                    proxy.CFrame = part.CFrame + ghostOffset
+                    proxy.Anchored = true
+                    proxy.CanCollide = true
+                    proxy.Transparency = 1
+                    proxy.Parent = ghostSkyFolder
+                    ghostClonedParts[part] = proxy
+                end
+            else
+                if proxy.CFrame ~= part.CFrame + ghostOffset then
+                    proxy.CFrame = part.CFrame + ghostOffset
+                end
+            end
+        end
+    end
+
+    for origPart, proxyPart in pairs(ghostClonedParts) do
+        if not neededParts[origPart] then
+            proxyPart:Destroy()
+            ghostClonedParts[origPart] = nil
+        end
+    end
+end)
 
 -- TOGGLE PRINCIPAL DO MENU
 ghostToggle = PlayerTab:Toggle({
