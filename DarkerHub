@@ -195,47 +195,52 @@ local ServerParagraph = InfoTab:Paragraph({Title = "Servidor", Desc = "0/0"})
 ---------------------------------------------------------------------------
 task.spawn(function()
     while true do
-        local getPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-        if getPlayerData then
-            pcall(function()
-                roles = getPlayerData:InvokeServer() or {}
-                Murder, Sheriff = nil, nil
+        pcall(function()
+            local remote = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Extras") 
+                and ReplicatedStorage.Remotes.Extras:FindFirstChild("GetPlayerData")
                 
-                local tempSheriff = nil
-                local sheriffDeadOrKilled = false
+            if remote then
+                roles = remote:InvokeServer() or {}
+            else
+                roles = game:GetService("ReplicatedStorage").Remotes.Extras.GetPlayerData:InvokeServer() or {}
+            end
 
-                for name, data in pairs(roles) do
-                    if data.Role == "Murderer" then
-                        Murder = name
-                    elseif data.Role == "Sheriff" then
-                        tempSheriff = name
-                        if data.Killed or data.Dead then
-                            sheriffDeadOrKilled = true
+            Murder, Sheriff = nil, nil
+            local tempSheriff = nil
+            local sheriffDeadOrKilled = false
+
+            for name, data in pairs(roles) do
+                if data.Role == "Murderer" then
+                    Murder = name
+                elseif data.Role == "Sheriff" then
+                    tempSheriff = name
+                    if data.Killed or data.Dead then
+                        sheriffDeadOrKilled = true
+                    end
+                elseif data.Role == "Hero" then
+                    tempSheriff = name
+                end
+            end
+
+            if sheriffDeadOrKilled then
+                tempSheriff = nil
+            end
+
+            if not tempSheriff then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Character and (p.Character:FindFirstChild("Gun") or p.Backpack:FindFirstChild("Gun")) then
+                        if p.Name ~= Murder then
+                            tempSheriff = p.Name
+                            break
                         end
-                    elseif data.Role == "Hero" then
-                        tempSheriff = name
                     end
                 end
+            end
 
-                if sheriffDeadOrKilled then
-                    tempSheriff = nil
-                end
-
-                if not tempSheriff then
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p.Character and (p.Character:FindFirstChild("Gun") or p.Backpack:FindFirstChild("Gun")) then
-                            if p.Name ~= Murder then
-                                tempSheriff = p.Name
-                                break
-                            end
-                        end
-                    end
-                end
-
-                Sheriff = tempSheriff
-            end)
-        end
-        task.wait(0.5)
+            Sheriff = tempSheriff
+        end)
+        task.wait(0.2) -- Atualização a cada 0.2 segundos (200ms)
     end
 end)
 
@@ -247,35 +252,22 @@ end
 
 local function GetPlayerRole(player)
     if not player then return "Innocent" end
-    local isParticipating = false
-    if roles then
-        for nome, _ in pairs(roles) do
-            if nome == player.Name then
-                isParticipating = true
-                break
-            end
-        end
-    end
-    if roles and next(roles) ~= nil and not isParticipating then
+    
+    -- Jogadores mortos ou que não estão participando da partida retornam como "Innocent"
+    if not IsParticipatingAndAlive(player) then
         return "Innocent"
     end
+    
     if player.Name == Murder then return "Murderer" end
     if player.Name == Sheriff then return "Sheriff" end
     return "Innocent"
-end
-
-local function GetMurdererPlayer()
-    if Murder then
-        return Players:FindFirstChild(Murder)
-    end
-    return nil
 end
 
 ---------------------------------------------------------------------------
 -- [ LOOP DA KILL AURA ]
 ---------------------------------------------------------------------------
 task.spawn(function()
-    while task.wait(0.05) do
+    while task.wait() do
         if (KillAuraEnabled or KillAuraSheriffOnly) and GetPlayerRole(LocalPlayer) == "Murderer" and LocalPlayer.Character then
             
             local myHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -842,7 +834,7 @@ ShootButton.MouseButton1Down:Connect(function()
 
         task.wait(0.005)
 
-        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+        local murderer = GetPlayerByRole("Murderer")
         if not murderer or not murderer.Character then return end
 
         local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
@@ -1313,20 +1305,22 @@ local function UpdateESP()
                     highlight.Parent = char
                 end
 
+                -- Cor padrão para Inocentes / Mortos / Não participantes: Verde
                 local color = Color3.fromRGB(0, 255, 0) 
-                if IsPlayerAlive(p) then
+
+                if IsParticipatingAndAlive(p) then
                     local role = GetPlayerRole(p)
                     if role == "Murderer" then
-                        color = Color3.fromRGB(255, 0, 0) 
+                        color = Color3.fromRGB(255, 0, 0) -- Vermelho
                     elseif role == "Sheriff" then
-                        color = Color3.fromRGB(0, 0, 255) 
+                        color = Color3.fromRGB(0, 0, 255) -- Azul
                     end
                 end
 
                 highlight.FillColor = color
                 highlight.OutlineColor = color
-                highlight.FillTransparency = 0.5
-                highlight.OutlineTransparency = 0
+                highlight.FillTransparency = 0.5    -- Transparência do meio (preenchimento)
+                highlight.OutlineTransparency = 0.5 -- Transparência da borda (contorno)
             else
                 if highlight then highlight:Destroy() end
             end
@@ -1985,145 +1979,7 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 EspTab:Toggle({Title = "ESP Players", Default = false, Callback = function(v) EspEnabled = v end})
-
-local EspUsernameEnabled = false
-
-EspTab:Toggle({
-    Title = "ESP username players",
-    Default = false,
-    Callback = function(v)
-        EspUsernameEnabled = v
-        if not v then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character and p.Character:FindFirstChild("EspUsernameGui") then
-                    p.Character.EspUsernameGui:Destroy()
-                end
-            end
-        end
-    end
-})
-
-RunService.RenderStepped:Connect(function()
-    if not EspUsernameEnabled then return end
-    
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local char = p.Character
-            
-            if char then
-                local head = char:FindFirstChild("Head")
-                local targetRoot = char:FindFirstChild("HumanoidRootPart")
-                local humanoid = char:FindFirstChild("Humanoid")
-                
-                -- Checagem nativa do Roblox para ver se o jogador está vivo
-                local isAlive = humanoid and humanoid.Health > 0
-                
-                if head and targetRoot and isAlive then
-                    local gui = char:FindFirstChild("EspUsernameGui")
-                    
-                    -- Se o jogador renasceu e não tem o GUI, cria um novo
-                    if not gui then
-                        gui = Instance.new("BillboardGui")
-                        gui.Name = "EspUsernameGui"
-                        gui.Adornee = head
-                        gui.Size = UDim2.new(0, 200, 0, 50)
-                        gui.StudsOffset = Vector3.new(0, 2.5, 0)
-                        gui.AlwaysOnTop = true
-                        gui.Parent = char
-                        
-                        local textLabel = Instance.new("TextLabel")
-                        textLabel.Name = "NameLabel"
-                        textLabel.Size = UDim2.new(1, 0, 1, 0)
-                        textLabel.BackgroundTransparency = 1
-                        textLabel.Font = Enum.Font.GothamBold
-                        textLabel.TextSize = 12
-                        textLabel.TextTransparency = 0.25 
-                        textLabel.TextStrokeTransparency = 0 
-                        textLabel.Parent = gui
-                    end
-                    
-                    local distance = myRoot and math.floor((myRoot.Position - targetRoot.Position).Magnitude) or 0
-                    local label = gui:FindFirstChild("NameLabel")
-                    
-                    if label then
-                        label.Text = p.Name .. "\n" .. distance .. " M"
-                        
-                        -- Verifica a role com segurança para não quebrar o loop
-                        local success, role = pcall(function() return GetPlayerRole(p) end)
-                        if not success then role = "Innocent" end
-                        
-                        if role == "Murderer" then
-                            label.TextColor3 = Color3.fromRGB(255, 0, 0)
-                            label.TextStrokeColor3 = Color3.fromRGB(80, 0, 0)
-                        elseif role == "Sheriff" then
-                            label.TextColor3 = Color3.fromRGB(0, 0, 255)
-                            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 80)
-                        else
-                            label.TextColor3 = Color3.fromRGB(0, 255, 0)
-                            label.TextStrokeColor3 = Color3.fromRGB(0, 80, 0)
-                        end
-                    end
-                else
-                    -- Limpa o GUI antigo se o jogador morrer
-                    local gui = char:FindFirstChild("EspUsernameGui")
-                    if gui then gui:Destroy() end
-                end
-            end
-        end
-    end
-end)
-
 EspTab:Toggle({Title = "ESP Gun", Default = false, Callback = function(v) GunEspEnabled = v end})
-
-local coinConnection = nil
-
-EspTab:Toggle({
-    Title = "ESP Coins", 
-    Default = false, 
-    Callback = function(enabled)
-        if enabled then
-            if coinConnection then coinConnection:Disconnect() end
-            
-            coinConnection = game:GetService("RunService").RenderStepped:Connect(function()
-                local areaDeBusca = workspace:FindFirstChild("NormalMaps") or workspace:FindFirstChild("Map") or workspace
-
-                for _, obj in ipairs(areaDeBusca:GetDescendants()) do
-                    if obj:IsA("BasePart") then
-                        local nome = string.lower(obj.Name)
-                        if (nome:find("coin") or nome:find("gold") or nome:find("token")) and obj.Transparency < 1 then
-                            local highlight = obj:FindFirstChild("CoinHighlight")
-                            if not highlight then
-                                highlight = Instance.new("Highlight")
-                                highlight.Name = "CoinHighlight"
-                                highlight.Parent = obj
-                            end
-                            highlight.FillColor = Color3.fromRGB(255, 150, 0)
-                            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                            highlight.FillTransparency = 0.5
-                            highlight.OutlineTransparency = 0
-                        end
-                    end
-                end
-            end)
-        else
-            if coinConnection then
-                coinConnection:Disconnect()
-                coinConnection = nil
-            end
-            
-            local areaDeBusca = workspace:FindFirstChild("NormalMaps") or workspace:FindFirstChild("Map") or workspace
-            for _, obj in ipairs(areaDeBusca:GetDescendants()) do
-                local highlight = obj:FindFirstChild("CoinHighlight")
-                if highlight then
-                    highlight:Destroy()
-                end
-            end
-        end
-    end
-})
 
 TeleportTab:Button({
     Title = "TP Murderer",
