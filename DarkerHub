@@ -761,14 +761,57 @@ local function ToggleShootButtonGui(enable)
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Localiza o Remote do próprio jogo que puxa os cargos reais
+local GetPlayerData = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Extras"):WaitForChild("GetPlayerData")
 
 -- ==========================================================
--- 1. SISTEMA DE TIRO GUIADO (Redireciona a bala em tempo real)
+-- FUNÇÃO AUXILIAR: Pega o Murderer direto do Remote do Jogo
+-- ==========================================================
+local function EncontrarMurderer()
+    local sucesso, dadosJogadores = pcall(function()
+        return GetPlayerData:InvokeServer()
+    end)
+    
+    if sucesso and typeof(dadosJogadores) == "table" then
+        -- Varre a tabela que o servidor mandou procurando pelo cargo de "Murderer"
+        for idUsuario, dados in pairs(dadosJogadores) do
+            if dados.Role == "Murderer" or dados.Role == "Murder" then
+                -- Transforma o ID ou Nome retornado no Objeto do Player correspondente
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.UserId == tonumber(idUsuario) or p.Name == tostring(idUsuario) or p.Name == dados.Name then
+                        if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                            return p
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Sistema de emergência caso o Remote falhe ou mude de formato
+    if typeof(GetPlayerByRole) == "function" then
+        local p = GetPlayerByRole("Murderer")
+        if p and p.Character then return p end
+    end
+    
+    return nil
+end
+
+-- ==========================================================
+-- 1. SISTEMA DE TIRO GUIADO (Redireciona e anula física indesejada)
 -- ==========================================================
 local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
+    if bulletPart:IsA("BasePart") then
+        bulletPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        bulletPart.Velocity = Vector3.new(0, 0, 0)
+        bulletPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+    end
+
     local connection
     connection = RunService.Heartbeat:Connect(function()
-        -- Se a bala sumiu ou o Murderer morreu, para de guiar
         if not bulletPart or not bulletPart.Parent or not murdererChar or not murdererChar:FindFirstChild("HumanoidRootPart") then
             if connection then connection:Disconnect() end
             return
@@ -782,16 +825,19 @@ local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
             local currentBulletPos = bulletPart.Position
             local liveTargetPos = targetPart.Position
             
-            -- Recalcula a direção exata para a posição ATUAL do Murderer a cada frame
+            -- Predição frame-a-frame para interceptar movimentos rápidos
+            local targetVelocity = targetPart.AssemblyLinearVelocity
+            if targetVelocity.Magnitude > 1 then
+                liveTargetPos = liveTargetPos + (targetVelocity * 0.05)
+            end
+            
             local direction = (liveTargetPos - currentBulletPos)
             local distance = direction.Magnitude
             
             if distance > 2 then
-                -- Move a bala na direção do Murderer ajustando a rota instantaneamente
-                local speed = 15 -- Velocidade de atração da bala
+                local speed = 25
                 bulletPart.CFrame = CFrame.new(currentBulletPos + (direction.Unit * math.min(speed, distance)), liveTargetPos)
             else
-                -- Quando estiver colado nele, força o registro de impacto
                 bulletPart.CFrame = CFrame.new(liveTargetPos)
                 pcall(function()
                     firetouchinterest(targetPart, bulletPart, 0)
@@ -804,10 +850,9 @@ local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
     end)
 end
 
--- Monitora quando a bala da arma é criada no mapa
 Workspace.ChildAdded:Connect(function(child)
     if child.Name == "Bullet" or child.Name == "Ray" or child.Name:lower():find("bullet") then
-        local murderer = typeof(GetMurdererPlayer) == "function" and GetMurdererPlayer() or nil
+        local murderer = EncontrarMurderer()
         if murderer and murderer.Character then
             GuiarBalaEmTempoReal(child, murderer.Character)
         end
@@ -815,7 +860,7 @@ Workspace.ChildAdded:Connect(function(child)
 end)
 
 -- ==========================================================
--- 2. SEU BOTÃO SHOOT (Atira normal e ativa a bala)
+-- 2. BOTÃO SHOOT CONECTADO COM O REMOTE DO JOGO
 -- ==========================================================
 ShootButton.MouseButton1Down:Connect(function()
     if ShootDragActive then return end
@@ -832,10 +877,14 @@ ShootButton.MouseButton1Down:Connect(function()
             gun.Parent = Character
         end
 
-        task.wait(0.005)
+        task.wait(0.01)
 
-        local murderer = GetPlayerByRole("Murderer")
-        if not murderer or not murderer.Character then return end
+        -- Puxa o Murderer usando a mesma verificação legítima do Remote
+        local murderer = EncontrarMurderer()
+        if not murderer or not murderer.Character then 
+            warn("Nao foi possivel detectar o Murderer através do Remote!")
+            return 
+        end
 
         local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
             or murderer.Character:FindFirstChild("UpperTorso")
@@ -852,7 +901,6 @@ ShootButton.MouseButton1Down:Connect(function()
                 local realOrigin = CFrame.new(originPos, targetPos)
                 local realTarget = CFrame.new(targetPos)
                 
-                -- Atira na direção inicial; o listener do Workspace assume o controle assim que a bala nascer
                 shootEvent:FireServer(realOrigin, realTarget)
 
                 task.spawn(function()
@@ -860,7 +908,7 @@ ShootButton.MouseButton1Down:Connect(function()
                         if typeof(PararAnimacoesDeTiro) == "function" then
                             PararAnimacoesDeTiro(Character)
                         end
-                        game:GetService("RunService").Heartbeat:Wait()
+                        RunService.Heartbeat:Wait()
                     end
                 end)
             end
