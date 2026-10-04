@@ -764,44 +764,47 @@ local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Localiza o Remote do próprio jogo que puxa os cargos reais
-local GetPlayerData = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Extras"):WaitForChild("GetPlayerData")
+local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================================
--- FUNÇÃO AUXILIAR: Pega o Murderer direto do Remote do Jogo
+-- CONFIGURAÇÃO DE PREDIÇÃO E PING
 -- ==========================================================
-local function EncontrarMurderer()
-    local sucesso, dadosJogadores = pcall(function()
-        return GetPlayerData:InvokeServer()
-    end)
-    
-    if sucesso and typeof(dadosJogadores) == "table" then
-        -- Varre a tabela que o servidor mandou procurando pelo cargo de "Murderer"
-        for idUsuario, dados in pairs(dadosJogadores) do
-            if dados.Role == "Murderer" or dados.Role == "Murder" then
-                -- Transforma o ID ou Nome retornado no Objeto do Player correspondente
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.UserId == tonumber(idUsuario) or p.Name == tostring(idUsuario) or p.Name == dados.Name then
-                        if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            return p
-                        end
-                    end
+local MULTIPLICADOR_PING = 2.0 -- Altere entre 1.5 e 2.5 conforme a necessidade da partida
+
+-- ==========================================================
+-- VARIÁVEIS E CACHE DO MURDERER
+-- ==========================================================
+local murdererAtual = nil
+
+-- Procura o Murderer no Workspace de forma instantânea (sem lag de rede)
+local function AtualizarMurderer()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                -- Checa se a faca está na mão ou na mochila
+                local temFacaMao = p.Character:FindFirstChild("Knife")
+                local temFacaMochila = p:FindFirstChild("Backpack") and p.Backpack:FindFirstChild("Knife")
+                
+                if temFacaMao or temFacaMochila then
+                    return p
                 end
             end
         end
     end
-
-    -- Sistema de emergência caso o Remote falhe ou mude de formato
-    if typeof(GetPlayerByRole) == "function" then
-        local p = GetPlayerByRole("Murderer")
-        if p and p.Character then return p end
-    end
-    
     return nil
 end
 
+-- Atualiza quem é o Murderer em segundo plano a cada 0.5s sem travar o clique
+task.spawn(function()
+    while true do
+        murdererAtual = AtualizarMurderer()
+        task.wait(0.5)
+    end
+end)
+
 -- ==========================================================
--- 1. SISTEMA DE TIRO GUIADO (Redireciona e anula física indesejada)
+-- 1. GUIAGEM A 60 FPS (HEARTBEAT)
 -- ==========================================================
 local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
     if bulletPart:IsA("BasePart") then
@@ -819,23 +822,16 @@ local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
 
         local targetPart = murdererChar:FindFirstChild("HumanoidRootPart") 
             or murdererChar:FindFirstChild("UpperTorso") 
-            or murdererChar:FindFirstChild("Head")
             
         if targetPart then
             local currentBulletPos = bulletPart.Position
             local liveTargetPos = targetPart.Position
             
-            -- Predição frame-a-frame para interceptar movimentos rápidos
-            local targetVelocity = targetPart.AssemblyLinearVelocity
-            if targetVelocity.Magnitude > 1 then
-                liveTargetPos = liveTargetPos + (targetVelocity * 0.05)
-            end
-            
             local direction = (liveTargetPos - currentBulletPos)
             local distance = direction.Magnitude
             
             if distance > 2 then
-                local speed = 25
+                local speed = 35 -- Velocidade do projétil na tela
                 bulletPart.CFrame = CFrame.new(currentBulletPos + (direction.Unit * math.min(speed, distance)), liveTargetPos)
             else
                 bulletPart.CFrame = CFrame.new(liveTargetPos)
@@ -852,39 +848,37 @@ end
 
 Workspace.ChildAdded:Connect(function(child)
     if child.Name == "Bullet" or child.Name == "Ray" or child.Name:lower():find("bullet") then
-        local murderer = EncontrarMurderer()
-        if murderer and murderer.Character then
-            GuiarBalaEmTempoReal(child, murderer.Character)
+        if murdererAtual and murdererAtual.Character then
+            GuiarBalaEmTempoReal(child, murdererAtual.Character)
         end
     end
 end)
 
 -- ==========================================================
--- 2. BOTÃO SHOOT CONECTADO COM O REMOTE DO JOGO
+-- 2. BOTÃO SHOOT COM MULTIPLICADOR DE PING
 -- ==========================================================
-ShootButton.MouseButton1Down:Connect(function()
-    if ShootDragActive then return end
-    local Character = LocalPlayer.Character
-    local Backpack = LocalPlayer:FindFirstChild("Backpack")
-    if not Character or not Backpack then return end
+if ShootButton then
+    ShootButton.MouseButton1Down:Connect(function()
+        if ShootDragActive then return end
+        
+        local Character = LocalPlayer.Character
+        local Backpack = LocalPlayer:FindFirstChild("Backpack")
+        if not Character or not Backpack then return end
 
-    local gunInBackpack = Backpack:FindFirstChild("Gun")
-    local gunInChar = Character:FindFirstChild("Gun")
-    local gun = gunInChar or gunInBackpack
+        local gunInBackpack = Backpack:FindFirstChild("Gun")
+        local gunInChar = Character:FindFirstChild("Gun")
+        local gun = gunInChar or gunInBackpack
 
-    if gun then
+        if not gun then return end
+
+        -- Equipa a arma se estiver na mochila
         if gun.Parent == Backpack then
             gun.Parent = Character
         end
 
-        task.wait(0.01)
-
-        -- Puxa o Murderer usando a mesma verificação legítima do Remote
-        local murderer = EncontrarMurderer()
-        if not murderer or not murderer.Character then 
-            warn("Nao foi possivel detectar o Murderer através do Remote!")
-            return 
-        end
+        -- Busca o Murderer pré-carregado
+        local murderer = murdererAtual or AtualizarMurderer()
+        if not murderer or not murderer.Character then return end
 
         local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
             or murderer.Character:FindFirstChild("UpperTorso")
@@ -898,23 +892,33 @@ ShootButton.MouseButton1Down:Connect(function()
                 local originPos = myRoot.Position + Vector3.new(0, 1.5, 0)
                 local targetPos = targetPart.Position
                 
-                local realOrigin = CFrame.new(originPos, targetPos)
+                -- Obtém o Ping atual
+                local ping = LocalPlayer:GetNetworkPing()
+                if ping <= 0 then ping = 0.05 end
+                
+                -- Aplica a predição multiplicada no vetor de velocidade (eixos X e Z)
+                local velocidade = targetPart.AssemblyLinearVelocity
+                if velocidade.Magnitude > 0.5 then
+                    local offset = Vector3.new(velocidade.X, 0, velocidade.Z) * ping * MULTIPLICADOR_PING
+                    targetPos = targetPos + offset
+                end
+                
+                -- Monta a rotação da origem virada exatamente para o ponto futuro do alvo
+                local realOrigin = CFrame.lookAt(originPos, targetPos)
                 local realTarget = CFrame.new(targetPos)
                 
+                -- Envia o disparo ajustado ao servidor
                 shootEvent:FireServer(realOrigin, realTarget)
 
-                task.spawn(function()
-                    for i = 1, 5 do
-                        if typeof(PararAnimacoesDeTiro) == "function" then
-                            PararAnimacoesDeTiro(Character)
-                        end
-                        RunService.Heartbeat:Wait()
-                    end
-                end)
+                if typeof(PararAnimacoesDeTiro) == "function" then
+                    pcall(function()
+                        PararAnimacoesDeTiro(Character)
+                    end)
+                end
             end
         end
-    end
-end)
+    end)
+end
 
         ShootButtonGui = ScreenGui
         UpdateShootButtonState()
@@ -1368,7 +1372,7 @@ local function UpdateESP()
                 highlight.FillColor = color
                 highlight.OutlineColor = color
                 highlight.FillTransparency = 0.5    -- Transparência do meio (preenchimento)
-                highlight.OutlineTransparency = 0.5 -- Transparência da borda (contorno)
+                highlight.OutlineTransparency = 1 -- Transparência da borda (contorno)
             else
                 if highlight then highlight:Destroy() end
             end
@@ -1756,7 +1760,7 @@ RunService.RenderStepped:Connect(function()
             highlight.FillColor = Color3.fromRGB(255, 255, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
             highlight.FillTransparency = 0.5
-            highlight.OutlineTransparency = 0.5
+            highlight.OutlineTransparency = 0
 
             local gui = gun:FindFirstChild("GunGui")
             if not gui then
@@ -2626,13 +2630,13 @@ local LocalPlayer = Players.LocalPlayer
 local ghostModeActive = false
 local canMoveButton = false
 local ghostCamConn = nil
-local ghostCharConn = nil
-local ghostDiedConn = nil
 local ghostCFrameConn = nil
+local ghostDiedConn = nil
 local ghostClone = nil
 local ghostClonedParts = {}
 local ghostOffset = Vector3.new(10000, 1000, 10000)
 local partPairs = {}
+local deathCamPart = nil
 
 local ghostSkyFolder = workspace:FindFirstChild("SkyCollisionMap") or Instance.new("Folder")
 ghostSkyFolder.Name = "SkyCollisionMap"
@@ -2642,6 +2646,7 @@ local lastKnownSkyPos = Vector3.zero
 local isUpdatingGhostCFrame = false
 
 local currentGhostButton = nil
+local ghostToggle
 
 local function updateGhostButtonUI(state)
     if currentGhostButton and currentGhostButton.Parent then
@@ -2710,6 +2715,9 @@ local function buildPartPairs(realModel, cloneModel)
     end
 end
 
+-- Declaração antecipada da função
+local setGhostState 
+
 local function checkTeleport()
     if not ghostModeActive or isUpdatingGhostCFrame then return end
     local char = LocalPlayer.Character
@@ -2726,7 +2734,30 @@ local function checkTeleport()
 
     local dist = (currentPos - lastKnownSkyPos).Magnitude
 
-    if dist > 100 or currentPos.Y < (ghostOffset.Y - 200) then
+    if dist > 100 then
+        -- Mantém o Ghost ativado ao ser teleportado pelo servidor (muda de mapa/lobby)
+        isUpdatingGhostCFrame = true
+        local newGroundPos = currentPos
+        
+        hrp.CFrame = CFrame.new(newGroundPos) + ghostOffset
+        lastKnownSkyPos = hrp.Position
+
+        if ghostClone then
+            local cloneHRP = ghostClone:FindFirstChild("HumanoidRootPart")
+            if cloneHRP then
+                cloneHRP.CFrame = CFrame.new(newGroundPos)
+            end
+        end
+
+        for realPart, clonePart in pairs(partPairs) do
+            if realPart and realPart.Parent and clonePart and clonePart.Parent then
+                clonePart.CFrame = realPart.CFrame - ghostOffset
+            end
+        end
+
+        isUpdatingGhostCFrame = false
+        return
+    elseif currentPos.Y < (ghostOffset.Y - 200) then
         isUpdatingGhostCFrame = true
         
         hrp.CFrame = hrp.CFrame + ghostOffset
@@ -2744,11 +2775,16 @@ local function checkTeleport()
     end
 end
 
-local ghostToggle
-
-local function setGhostState(state)
+-- Função principal de ativação/desativação
+setGhostState = function(state, skipTeleportBack)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    -- Limpa conexões antigas
+    RunService:UnbindFromRenderStep("GhostSyncVisual")
+    if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
+    if ghostCFrameConn then ghostCFrameConn:Disconnect() ghostCFrameConn = nil end
+    if ghostDiedConn then ghostDiedConn:Disconnect() ghostDiedConn = nil end
 
     ghostModeActive = state
     updateGhostButtonUI(state)
@@ -2762,6 +2798,12 @@ local function setGhostState(state)
     end
 
     if ghostModeActive then
+        -- Remove foco de morte anterior se existir
+        if deathCamPart then
+            deathCamPart:Destroy()
+            deathCamPart = nil
+        end
+
         isUpdatingGhostCFrame = true
         local hrp = char.HumanoidRootPart
         local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -2769,9 +2811,27 @@ local function setGhostState(state)
 
         local initialCFrame = hrp.CFrame
 
+        -- DETECÇÃO DE MORTE DO PERSONAGEM REAL
         if humanoid then
             ghostDiedConn = humanoid.Died:Connect(function()
-                setGhostState(false)
+                -- Cria um ponto invisível onde o clone estava para prender a câmera lá
+                if ghostClone and ghostClone:FindFirstChild("HumanoidRootPart") then
+                    local lastCloneCFrame = ghostClone.HumanoidRootPart.CFrame
+                    
+                    deathCamPart = Instance.new("Part")
+                    deathCamPart.Name = "GhostDeathCamFocus"
+                    deathCamPart.Size = Vector3.new(1, 1, 1)
+                    deathCamPart.Transparency = 1
+                    deathCamPart.CanCollide = false
+                    deathCamPart.Anchored = true
+                    deathCamPart.CFrame = lastCloneCFrame
+                    deathCamPart.Parent = workspace
+
+                    workspace.CurrentCamera.CameraSubject = deathCamPart
+                end
+                
+                -- Desativa o Ghost Mode sem puxar o corpo morto de volta
+                setGhostState(false, true)
             end)
         end
 
@@ -2789,8 +2849,16 @@ local function setGhostState(state)
         
         ghostClone.Parent = workspace
 
+        -- Ancoragem no céu
+        hrp.Anchored = true
         hrp.CFrame = initialCFrame + ghostOffset
         lastKnownSkyPos = hrp.Position
+
+        task.delay(0.01, function()
+            if ghostModeActive and hrp and hrp.Parent then
+                hrp.Anchored = false
+            end
+        end)
 
         local cloneHumanoid = ghostClone:FindFirstChildOfClass("Humanoid")
         if cloneHumanoid then
@@ -2806,19 +2874,6 @@ local function setGhostState(state)
                 local targetSubject = ghostClone:FindFirstChildOfClass("Humanoid")
                 if workspace.CurrentCamera.CameraSubject ~= targetSubject then
                     workspace.CurrentCamera.CameraSubject = targetSubject
-                end
-            end
-        end)
-
-        ghostCharConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
-            if ghostModeActive then
-                task.wait(0.2)
-                local newHRP = newChar:WaitForChild("HumanoidRootPart", 5)
-                if newHRP then 
-                    isUpdatingGhostCFrame = true
-                    newHRP.CFrame = newHRP.CFrame + ghostOffset 
-                    lastKnownSkyPos = newHRP.Position
-                    isUpdatingGhostCFrame = false
                 end
             end
         end)
@@ -2851,29 +2906,44 @@ local function setGhostState(state)
             end
         end)
     else
-        RunService:UnbindFromRenderStep("GhostSyncVisual")
-        if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
-        if ghostCharConn then ghostCharConn:Disconnect() ghostCharConn = nil end
-        if ghostDiedConn then ghostDiedConn:Disconnect() ghostDiedConn = nil end
-        if ghostCFrameConn then ghostCFrameConn:Disconnect() ghostCFrameConn = nil end
-        
+        -- DESTRUIÇÃO DO GHOST
+        if ghostClone then ghostClone:Destroy() ghostClone = nil end
+        table.clear(partPairs)
+
         local currentChar = LocalPlayer.Character
         if currentChar and currentChar:FindFirstChild("HumanoidRootPart") then
             isUpdatingGhostCFrame = true
-            currentChar.HumanoidRootPart.CFrame = currentChar.HumanoidRootPart.CFrame - ghostOffset
+            
+            if not skipTeleportBack then
+                currentChar.HumanoidRootPart.CFrame = currentChar.HumanoidRootPart.CFrame - ghostOffset
+            end
+            
+            currentChar.HumanoidRootPart.Anchored = false 
             isUpdatingGhostCFrame = false
             
             local realHumanoid = currentChar:FindFirstChildOfClass("Humanoid")
-            if realHumanoid then
+            -- Só devolve a câmera para o personagem real SE ELE ESTIVER VIVO
+            if realHumanoid and realHumanoid.Health > 0 then
                 workspace.CurrentCamera.CameraSubject = realHumanoid
             end
         end
 
-        if ghostClone then ghostClone:Destroy() ghostClone = nil end
-        table.clear(partPairs)
         lastKnownSkyPos = Vector3.zero
     end
 end
+
+-- LIMPEZA DA CÂMERA AO NASCER UM NOVO PERSONAGEM (RESPAWN)
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    if deathCamPart then
+        deathCamPart:Destroy()
+        deathCamPart = nil
+    end
+    
+    local newHum = newChar:WaitForChild("Humanoid", 5)
+    if newHum then
+        workspace.CurrentCamera.CameraSubject = newHum
+    end
+end)
 
 -- ==========================================
 -- CONTINUOUS MAP CLONING LOOP (BACKGROUND)
@@ -2962,7 +3032,7 @@ PlayerTab:Toggle({
             local GhostButton = Instance.new("TextButton")
             GhostButton.Name = "GhostButton"
             GhostButton.Size = UDim2.new(0, 70, 0, 70)
-            GhostButton.Position = UDim2.new(0.5, -35, 0.85, 0)
+            GhostButton.Position = UDim2.new(0.5, -35, 0.80, 0)
             GhostButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             GhostButton.BackgroundTransparency = 0.5
             GhostButton.RichText = true
@@ -3042,7 +3112,6 @@ PlayerTab:Toggle({
     end
 })
 
--- FUNÇÃO LOGO ABAIXO PARA MOVER/TRAVAR O BOTÃO
 PlayerTab:Toggle({
     Title = "Drag button",
     Default = false,
