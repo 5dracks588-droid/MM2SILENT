@@ -759,35 +759,32 @@ local function ToggleShootButtonGui(enable)
             end
         end)
 
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- ==========================================================
+-- SISTEMA DE SHOOT COMPLETO COM PREDIÇÃO HORIZONTAL (MM2)
+-- ==========================================================
 
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Localiza o RemoteFunction de dados das funções do MM2
-local GetPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-
--- ==========================================================
+-------------------------------------------------------------
 -- CONFIGURAÇÃO DE PREDIÇÃO E PING
--- ==========================================================
+-------------------------------------------------------------
 local MULTIPLICADOR_PING = 2.0 -- Altere entre 1.5 e 2.5 conforme a necessidade da partida
 
--- ==========================================================
--- VARIÁVEIS E CACHE DO MURDERER
--- ==========================================================
+-------------------------------------------------------------
+-- VARIÁVEIS E DETECÇÃO DO MURDERER
+-------------------------------------------------------------
 local murdererAtual = nil
 
--- Procura o Murderer via RemoteEvent / RemoteFunction GetPlayerData
 local function AtualizarMurderer()
-    if not GetPlayerData then
-        GetPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-    end
-
-    if GetPlayerData and GetPlayerData:IsA("RemoteFunction") then
+    -- ETAPA 1: Consulta GetPlayerData (Início da partida / < 10s)
+    local getPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    if getPlayerData and getPlayerData:IsA("RemoteFunction") then
         local success, data = pcall(function()
-            return GetPlayerData:InvokeServer()
+            return getPlayerData:InvokeServer()
         end)
 
         if success and type(data) == "table" then
@@ -799,7 +796,7 @@ local function AtualizarMurderer()
                     role = info
                 end
 
-                if role == "Murderer" then
+                if role == "Murderer" or role == "Murder" then
                     local p = Players:FindFirstChild(playerName)
                     if p and p ~= LocalPlayer and p.Character then
                         local hum = p.Character:FindFirstChildOfClass("Humanoid")
@@ -812,10 +809,28 @@ local function AtualizarMurderer()
         end
     end
 
+    -- ETAPA 2: Verificação por Inventário (Após a faca spawnar)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local backpack = player:FindFirstChild("Backpack")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+
+            if hum and hum.Health > 0 then
+                local charKnife = char:FindFirstChild("Knife")
+                local backpackKnife = backpack and backpack:FindFirstChild("Knife")
+
+                if charKnife or backpackKnife then
+                    return player
+                end
+            end
+        end
+    end
+
     return nil
 end
 
--- Atualiza quem é o Murderer em segundo plano a cada 0.5s via Remote
+-- Atualiza o Murderer em segundo plano a cada 0.5s
 task.spawn(function()
     while true do
         murdererAtual = AtualizarMurderer()
@@ -823,9 +838,38 @@ task.spawn(function()
     end
 end)
 
--- ==========================================================
+-------------------------------------------------------------
+-- CÁLCULO DA POSIÇÃO PREVISTA (EXATAMENTE PING * MULTIPLICADOR)
+-------------------------------------------------------------
+local function ObterPing()
+    local ping = 0
+    pcall(function()
+        if LocalPlayer.GetNetworkPing then
+            ping = LocalPlayer:GetNetworkPing()
+        end
+    end)
+    return (ping and ping > 0) and ping or 0.05
+end
+
+local function CalcularPosicaoPrevista(targetPart)
+    if not targetPart then return Vector3.zero end
+
+    local targetPos = targetPart.Position
+    local ping = ObterPing()
+    local velocidade = targetPart.AssemblyLinearVelocity or targetPart.Velocity or Vector3.new(0,0,0)
+
+    -- Isola a velocidade nos eixos X e Z e aplica o multiplicador de ping
+    if velocidade.Magnitude > 0.5 then
+        local offset = Vector3.new(velocidade.X, 0, velocidade.Z) * ping * MULTIPLICADOR_PING
+        targetPos = targetPos + offset
+    end
+
+    return targetPos
+end
+
+-------------------------------------------------------------
 -- 1. GUIAGEM A 60 FPS (HEARTBEAT)
--- ==========================================================
+-------------------------------------------------------------
 local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
     if bulletPart:IsA("BasePart") then
         bulletPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -851,7 +895,7 @@ local function GuiarBalaEmTempoReal(bulletPart, murdererChar)
             local distance = direction.Magnitude
             
             if distance > 2 then
-                local speed = 35 -- Velocidade do projétil na tela
+                local speed = 35
                 bulletPart.CFrame = CFrame.new(currentBulletPos + (direction.Unit * math.min(speed, distance)), liveTargetPos)
             else
                 bulletPart.CFrame = CFrame.new(liveTargetPos)
@@ -868,75 +912,74 @@ end
 
 Workspace.ChildAdded:Connect(function(child)
     if child.Name == "Bullet" or child.Name == "Ray" or child.Name:lower():find("bullet") then
-        if murdererAtual and murdererAtual.Character then
-            GuiarBalaEmTempoReal(child, murdererAtual.Character)
+        local murderer = murdererAtual or AtualizarMurderer()
+        if murderer and murderer.Character then
+            GuiarBalaEmTempoReal(child, murderer.Character)
         end
     end
 end)
 
--- ==========================================================
--- 2. BOTÃO SHOOT COM MULTIPLICADOR DE PING
--- ==========================================================
+-------------------------------------------------------------
+-- 2. FUNÇÃO DE DISPARO DO BOTÃO SHOOT
+-------------------------------------------------------------
+local function ExecutarDisparo()
+    local Character = LocalPlayer.Character
+    local Backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not Character or not Backpack then return end
+
+    local gunInBackpack = Backpack:FindFirstChild("Gun") or Backpack:FindFirstChild("Revolver")
+    local gunInChar = Character:FindFirstChild("Gun") or Character:FindFirstChild("Revolver")
+    local gun = gunInChar or gunInBackpack
+
+    if not gun then 
+        warn("[Shoot System] Você não possui a arma!")
+        return 
+    end
+
+    if gun.Parent == Backpack then
+        gun.Parent = Character
+        task.wait(0.05)
+    end
+
+    local murderer = murdererAtual or AtualizarMurderer()
+    if not murderer or not murderer.Character then 
+        warn("[Shoot System] Murderer não encontrado!")
+        return 
+    end
+
+    local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
+        or murderer.Character:FindFirstChild("UpperTorso")
+    local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
+    local myRoot = Character:FindFirstChild("HumanoidRootPart")
+
+    if targetPart and humanoid and humanoid.Health > 0 and myRoot then
+        local shootEvent = gun:FindFirstChild("Shoot") or gun:FindFirstChild("KnifeServer") or ReplicatedStorage:FindFirstChild("ShootGun", true)
+
+        if shootEvent and shootEvent:IsA("RemoteEvent") then
+            local originPos = myRoot.Position + Vector3.new(0, 1.5, 0)
+            local targetPos = CalcularPosicaoPrevista(targetPart)
+
+            local realOrigin = CFrame.lookAt(originPos, targetPos)
+            local realTarget = CFrame.new(targetPos)
+
+            shootEvent:FireServer(realOrigin, realTarget)
+
+            if typeof(PararAnimacoesDeTiro) == "function" then
+                pcall(function()
+                    PararAnimacoesDeTiro(Character)
+                end)
+            end
+        end
+    end
+end
+
+-------------------------------------------------------------
+-- VÍNCULO COM O BOTÃO (ShootButton)
+-------------------------------------------------------------
 if ShootButton then
     ShootButton.MouseButton1Down:Connect(function()
         if ShootDragActive then return end
-        
-        local Character = LocalPlayer.Character
-        local Backpack = LocalPlayer:FindFirstChild("Backpack")
-        if not Character or not Backpack then return end
-
-        local gunInBackpack = Backpack:FindFirstChild("Gun")
-        local gunInChar = Character:FindFirstChild("Gun")
-        local gun = gunInChar or gunInBackpack
-
-        if not gun then return end
-
-        -- Equipa a arma se estiver na mochila
-        if gun.Parent == Backpack then
-            gun.Parent = Character
-        end
-
-        -- Busca o Murderer pré-carregado
-        local murderer = murdererAtual or AtualizarMurderer()
-        if not murderer or not murderer.Character then return end
-
-        local targetPart = murderer.Character:FindFirstChild("HumanoidRootPart") 
-            or murderer.Character:FindFirstChild("UpperTorso")
-        local humanoid = murderer.Character:FindFirstChildOfClass("Humanoid")
-        local myRoot = Character:FindFirstChild("HumanoidRootPart")
-        
-        if targetPart and humanoid and humanoid.Health > 0 and myRoot then
-            local shootEvent = gun:FindFirstChild("Shoot")
-            
-            if shootEvent and shootEvent:IsA("RemoteEvent") then
-                local originPos = myRoot.Position + Vector3.new(0, 1.5, 0)
-                local targetPos = targetPart.Position
-                
-                -- Obtém o Ping atual
-                local ping = LocalPlayer:GetNetworkPing()
-                if ping <= 0 then ping = 0.05 end
-                
-                -- Aplica a predição multiplicada no vetor de velocidade (eixos X e Z)
-                local velocidade = targetPart.AssemblyLinearVelocity
-                if velocidade.Magnitude > 0.5 then
-                    local offset = Vector3.new(velocidade.X, 0, velocidade.Z) * ping * MULTIPLICADOR_PING
-                    targetPos = targetPos + offset
-                end
-                
-                -- Monta a rotação da origem virada exatamente para o ponto futuro do alvo
-                local realOrigin = CFrame.lookAt(originPos, targetPos)
-                local realTarget = CFrame.new(targetPos)
-                
-                -- Envia o disparo ajustado ao servidor
-                shootEvent:FireServer(realOrigin, realTarget)
-
-                if typeof(PararAnimacoesDeTiro) == "function" then
-                    pcall(function()
-                        PararAnimacoesDeTiro(Character)
-                    end)
-                end
-            end
-        end
+        ExecutarDisparo()
     end)
 end
 
@@ -961,31 +1004,28 @@ RunService.RenderStepped:Connect(function()
         FPSParagraph:SetDesc(FPS .. " FPS")
         ServerParagraph:SetDesc(#Players:GetPlayers() .. "/" .. Players.MaxPlayers)
         
-                -- Murderer
-        local murdPlayer = Murder and Players:FindFirstChild(Murder)
-        local murdImg = murdPlayer and ('<img src="rbxthumb://type=AvatarHeadShot&id=' .. murdPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>') or ""
-        local murdName = murdPlayer and murdPlayer.Name or "Nenhum"
-        local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdImg .. ' ' .. murdName .. '</font>'
+-- Loop de atualização contínua a cada 0.2s (200 milissegundos)
+task.spawn(function()
+    while true do
+        local murdPlayer = typeof(Murder) == "Instance" and Murder or (Murder and Players:FindFirstChild(tostring(Murder)))
+        local sheriffPlayer = typeof(Sheriff) == "Instance" and Sheriff or (Sheriff and Players:FindFirstChild(tostring(Sheriff)))
 
-        -- Sheriff
-        local sheriffPlayer = Sheriff and Players:FindFirstChild(Sheriff)
-        local sheriffImg = sheriffPlayer and ('<img src="rbxthumb://type=AvatarHeadShot&id=' .. sheriffPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>') or ""
-        local sheriffName = sheriffPlayer and sheriffPlayer.Name or "Nenhum"
-        local sheriffText = '<font color="#0088FF"><b>Sheriff:</b> ' .. sheriffImg .. ' ' .. sheriffName .. '</font>'
+        -- 1. Murderer (Vermelho)
+        local murdName = murdPlayer and murdPlayer.Name or "-"
+        local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdName .. '</font>'
 
-        -- Você
-        local myRole = GetPlayerRole(LocalPlayer)
-        local myColor = "#00FF00" -- Innocent
-        if myRole == "Murderer" then
-            myColor = "#FF0000"
-        elseif myRole == "Sheriff" then
-            myColor = "#0088FF"
-        end
-        local myImg = '<img src="rbxthumb://type=AvatarHeadShot&id=' .. LocalPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>'
-        local myText = '<font color="' .. myColor .. '"><b>Você (' .. myRole .. '):</b> ' .. myImg .. ' ' .. LocalPlayer.Name .. '</font>'
+        -- 2. Sheriff (Azul)
+        local sheriffName = sheriffPlayer and sheriffPlayer.Name or "-"
+        local sheriffText = '<font color="#0088FF"><b>Sheriff:</b> ' .. sheriffName .. '</font>'
 
         -- Atualiza a interface
-        RoleParagraph:SetDesc(murdText .. "\n" .. sheriffText .. "\n" .. myText)
+        if RoleParagraph then
+            RoleParagraph:SetDesc(murdText .. "\n" .. sheriffText)
+        end
+
+        task.wait(0.2)
+    end
+end)
 
         FPS = 0
         Last = tick()
