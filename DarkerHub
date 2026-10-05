@@ -766,6 +766,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
+-- Localiza o RemoteFunction de dados das funções do MM2
+local GetPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+
 -- ==========================================================
 -- CONFIGURAÇÃO DE PREDIÇÃO E PING
 -- ==========================================================
@@ -776,26 +779,43 @@ local MULTIPLICADOR_PING = 2.0 -- Altere entre 1.5 e 2.5 conforme a necessidade 
 -- ==========================================================
 local murdererAtual = nil
 
--- Procura o Murderer no Workspace de forma instantânea (sem lag de rede)
+-- Procura o Murderer via RemoteEvent / RemoteFunction GetPlayerData
 local function AtualizarMurderer()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then
-                -- Checa se a faca está na mão ou na mochila
-                local temFacaMao = p.Character:FindFirstChild("Knife")
-                local temFacaMochila = p:FindFirstChild("Backpack") and p.Backpack:FindFirstChild("Knife")
-                
-                if temFacaMao or temFacaMochila then
-                    return p
+    if not GetPlayerData then
+        GetPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    end
+
+    if GetPlayerData and GetPlayerData:IsA("RemoteFunction") then
+        local success, data = pcall(function()
+            return GetPlayerData:InvokeServer()
+        end)
+
+        if success and type(data) == "table" then
+            for playerName, info in pairs(data) do
+                local role = nil
+                if type(info) == "table" then
+                    role = info.Role or info.role
+                elseif type(info) == "string" then
+                    role = info
+                end
+
+                if role == "Murderer" then
+                    local p = Players:FindFirstChild(playerName)
+                    if p and p ~= LocalPlayer and p.Character then
+                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health > 0 then
+                            return p
+                        end
+                    end
                 end
             end
         end
     end
+
     return nil
 end
 
--- Atualiza quem é o Murderer em segundo plano a cada 0.5s sem travar o clique
+-- Atualiza quem é o Murderer em segundo plano a cada 0.5s via Remote
 task.spawn(function()
     while true do
         murdererAtual = AtualizarMurderer()
@@ -941,14 +961,31 @@ RunService.RenderStepped:Connect(function()
         FPSParagraph:SetDesc(FPS .. " FPS")
         ServerParagraph:SetDesc(#Players:GetPlayers() .. "/" .. Players.MaxPlayers)
         
-        local role = GetPlayerRole(LocalPlayer)
-        local roleDesc = '<font color="#00FF00">Innocent</font>'
-        if role == "Murderer" then
-            roleDesc = '<font color="#FF0000">Murderer</font>'
-        elseif role == "Sheriff" then
-            roleDesc = '<font color="#0055FF">Sheriff</font>'
+                -- Murderer
+        local murdPlayer = Murder and Players:FindFirstChild(Murder)
+        local murdImg = murdPlayer and ('<img src="rbxthumb://type=AvatarHeadShot&id=' .. murdPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>') or ""
+        local murdName = murdPlayer and murdPlayer.Name or "Nenhum"
+        local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdImg .. ' ' .. murdName .. '</font>'
+
+        -- Sheriff
+        local sheriffPlayer = Sheriff and Players:FindFirstChild(Sheriff)
+        local sheriffImg = sheriffPlayer and ('<img src="rbxthumb://type=AvatarHeadShot&id=' .. sheriffPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>') or ""
+        local sheriffName = sheriffPlayer and sheriffPlayer.Name or "Nenhum"
+        local sheriffText = '<font color="#0088FF"><b>Sheriff:</b> ' .. sheriffImg .. ' ' .. sheriffName .. '</font>'
+
+        -- Você
+        local myRole = GetPlayerRole(LocalPlayer)
+        local myColor = "#00FF00" -- Innocent
+        if myRole == "Murderer" then
+            myColor = "#FF0000"
+        elseif myRole == "Sheriff" then
+            myColor = "#0088FF"
         end
-        RoleParagraph:SetDesc(roleDesc)
+        local myImg = '<img src="rbxthumb://type=AvatarHeadShot&id=' .. LocalPlayer.UserId .. '&w=150&h=150" width="20" height="20"/>'
+        local myText = '<font color="' .. myColor .. '"><b>Você (' .. myRole .. '):</b> ' .. myImg .. ' ' .. LocalPlayer.Name .. '</font>'
+
+        -- Atualiza a interface
+        RoleParagraph:SetDesc(murdText .. "\n" .. sheriffText .. "\n" .. myText)
 
         FPS = 0
         Last = tick()
