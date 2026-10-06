@@ -2314,6 +2314,82 @@ FarmTab:Button({
     end
 })
 
+---------------------------------------------------------------------------
+-- [ AUTO FORCE MAP VOTE / VOTE SPAMMER (TIMED) ]
+---------------------------------------------------------------------------
+local SelectedMapVote = "1"
+local AutoForceMapVote = false
+
+local MapVoteCoords = {
+    ["1"] = Vector3.new(25, 507, 49),
+    ["2"] = Vector3.new(13, 507, 52),
+    ["3"] = Vector3.new(1, 507, 49)
+}
+
+FarmTab:Dropdown({
+    Title = "Map vote selector",
+    Values = {"1", "2", "3"},
+    Value = "1",
+    Callback = function(v)
+        SelectedMapVote = v
+    end
+})
+
+FarmTab:Toggle({
+    Title = "Auto force map vote (Vote Spam)",
+    Default = false,
+    Callback = function(v)
+        AutoForceMapVote = v
+        if AutoForceMapVote then
+            task.spawn(function()
+                while AutoForceMapVote do
+                    task.wait(0.01)
+
+                    -- 1. Verifica se NÃO há partida em andamento
+                    local normalMaps = workspace:FindFirstChild("NormalMaps")
+                    local hasActiveMatch = (normalMaps and #normalMaps:GetChildren() > 0)
+
+                    -- 2. Verifica se as plataformas de votação estão no Lobby
+                    local mapVoteSpawned = false
+                    for _, obj in ipairs(workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and (obj.Position - Vector3.new(13, 507, 50)).Magnitude < 50 then
+                            mapVoteSpawned = true
+                            break
+                        end
+                    end
+
+                    -- Executa a votação se estiver na fase de voto
+                    if not hasActiveMatch and mapVoteSpawned then
+                        local char = LocalPlayer.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+                        if hrp and hum and hum.Health > 0 then
+                            local targetPos = MapVoteCoords[SelectedMapVote]
+                            if targetPos then
+                                -- Teleporta para a plataforma
+                                hrp.CFrame = CFrame.new(targetPos)
+                                
+                                -- 1. Fica exatamente 80 milésimos (0.08s) na coordenada para o servidor registrar o toque
+                                task.wait(0.2)
+
+                                -- Reseta o jogador
+                                hum.Health = 0
+
+                                -- Aguarda o personagem renascer no servidor
+                                LocalPlayer.CharacterAdded:Wait()
+
+                                -- 2. Aguarda exatamente 80 milésimos (0.08s) APÓS renascer para iniciar o próximo ciclo
+                                task.wait()
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
 PlayerTab:Input({
     Title = "Speed",
     Placeholder = "16",
