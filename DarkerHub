@@ -185,7 +185,7 @@ local FarmTab = Window:Tab({Title = "Farm", Icon = "coins"})
 local PlayerTab = Window:Tab({Title = "Player", Icon = "user"})
 local PerformanceTab = Window:Tab({Title = "Desempenho", Icon = "cpu"})
 
-local RoleParagraph = InfoTab:Paragraph({Title = "Time", Desc = "Carregando..."})
+local RoleParagraph = InfoTab:Paragraph({Title = "Game stats", Desc = "Carregando..."})
 local PingParagraph = InfoTab:Paragraph({Title = "Ping", Desc = "0 ms"})
 local FPSParagraph = InfoTab:Paragraph({Title = "FPS", Desc = "0 FPS"})
 local ServerParagraph = InfoTab:Paragraph({Title = "Servidor", Desc = "0/0"})
@@ -2422,6 +2422,80 @@ PerformanceTab:Toggle({
             OptimizeTextures()
         else
             RestoreTextures()
+        end
+    end
+})
+
+local EspLinesEnabled = false
+local Tracers = {}
+
+RunService.RenderStepped:Connect(function()
+    if not EspLinesEnabled then
+        for _, tracer in pairs(Tracers) do
+            tracer.Visible = false
+        end
+        return
+    end
+
+    local topScreenPos = Vector2.new(Camera.ViewportSize.X / 2, 0)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local tracer = Tracers[player]
+            if not tracer then
+                tracer = Drawing.new("Line")
+                tracer.Thickness = 1.5
+                tracer.Transparency = 1
+                Tracers[player] = tracer
+            end
+
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+            if hrp then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+                if onScreen then
+                    local color = Color3.fromRGB(0, 255, 0)
+                    if IsParticipatingAndAlive(player) then
+                        local role = GetPlayerRole(player)
+                        if role == "Murderer" then
+                            color = Color3.fromRGB(255, 0, 0)
+                        elseif role == "Sheriff" then
+                            color = Color3.fromRGB(0, 0, 255)
+                        end
+                    end
+
+                    tracer.From = topScreenPos
+                    tracer.To = Vector2.new(screenPos.X, screenPos.Y)
+                    tracer.Color = color
+                    tracer.Visible = true
+                else
+                    tracer.Visible = false
+                end
+            else
+                tracer.Visible = false
+            end
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if Tracers[player] then
+        pcall(function() Tracers[player]:Remove() end)
+        Tracers[player] = nil
+    end
+end)
+
+EspTab:Toggle({
+    Title = "ESP lines",
+    Default = false,
+    Callback = function(v)
+        EspLinesEnabled = v
+        if not v then
+            for _, tracer in pairs(Tracers) do
+                tracer.Visible = false
+            end
         end
     end
 })
