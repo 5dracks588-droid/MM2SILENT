@@ -2437,7 +2437,8 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    local topScreenPos = Vector2.new(Camera.ViewportSize.X / 2, 0)
+    -- Posição do meio da parte inferior (baixo) da tela
+    local bottomScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -2466,7 +2467,7 @@ RunService.RenderStepped:Connect(function()
                         end
                     end
 
-                    tracer.From = topScreenPos
+                    tracer.From = bottomScreenPos
                     tracer.To = Vector2.new(screenPos.X, screenPos.Y)
                     tracer.Color = color
                     tracer.Visible = true
