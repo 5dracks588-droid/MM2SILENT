@@ -2102,6 +2102,36 @@ FlingTab:Button({
     end
 })
 
+local TouchFlingEnabled = false
+local touchFlingConn = nil
+
+FlingTab:Toggle({
+    Title = "Touch fling",
+    Default = false,
+    Callback = function(v)
+        TouchFlingEnabled = v
+        if TouchFlingEnabled then
+            touchFlingConn = RunService.Heartbeat:Connect(function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local currentVel = hrp.AssemblyLinearVelocity
+                    hrp.AssemblyLinearVelocity = Vector3.new(9e9, 9e9, 9e9)
+                    RunService.RenderStepped:Wait()
+                    if hrp and hrp.Parent then
+                        hrp.AssemblyLinearVelocity = currentVel
+                    end
+                end
+            end)
+        else
+            if touchFlingConn then
+                touchFlingConn:Disconnect()
+                touchFlingConn = nil
+            end
+        end
+    end
+})
+
 Players.PlayerRemoving:Connect(function(p)
     if SelectedPlayerToFling == p.Name then SelectedPlayerToFling = "" end
     if SelectedPlayerToTp == p.Name then SelectedPlayerToTp = "" end
