@@ -774,13 +774,19 @@ local LocalPlayer = Players.LocalPlayer
 -------------------------------------------------------------
 local MULTIPLICADOR_PING = 2.0 -- Altere entre 1.5 e 2.5 conforme a necessidade da partida
 
--------------------------------------------------------------
--- VARIÁVEIS E DETECÇÃO DO MURDERER
--------------------------------------------------------------
-local murdererAtual = nil
-
 local function AtualizarMurderer()
-    -- ETAPA 1: Consulta GetPlayerData (Início da partida / < 10s)
+    -- ETAPA 1: Pega diretamente o nick do Murderer detectado pelo ESP / Role Detector
+    if Murder then
+        local p = typeof(Murder) == "Instance" and Murder or Players:FindFirstChild(tostring(Murder))
+        if p and p ~= LocalPlayer and p.Character then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                return p
+            end
+        end
+    end
+
+    -- ETAPA 2: Consulta GetPlayerData (Backup se o detector ainda não atualizou)
     local getPlayerData = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
     if getPlayerData and getPlayerData:IsA("RemoteFunction") then
         local success, data = pcall(function()
@@ -809,34 +815,8 @@ local function AtualizarMurderer()
         end
     end
 
-    -- ETAPA 2: Verificação por Inventário (Após a faca spawnar)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local char = player.Character
-            local backpack = player:FindFirstChild("Backpack")
-            local hum = char:FindFirstChildOfClass("Humanoid")
-
-            if hum and hum.Health > 0 then
-                local charKnife = char:FindFirstChild("Knife")
-                local backpackKnife = backpack and backpack:FindFirstChild("Knife")
-
-                if charKnife or backpackKnife then
-                    return player
-                end
-            end
-        end
-    end
-
     return nil
 end
-
--- Atualiza o Murderer em segundo plano a cada 0.5s
-task.spawn(function()
-    while true do
-        murdererAtual = AtualizarMurderer()
-        task.wait(0.5)
-    end
-end)
 
 -------------------------------------------------------------
 -- CÁLCULO DA POSIÇÃO PREVISTA (EXATAMENTE PING * MULTIPLICADOR)
