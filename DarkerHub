@@ -1692,8 +1692,8 @@ local function ExecutarMecanismoFling(TargetPlayer)
                 char:SetPrimaryPartCFrame(finalCFrame)
             end
             
-            root.Velocity = Vector3.new(50000, -50000, 50000)
-            root.RotVelocity = Vector3.new(50000, 50000, 50000)
+            root.Velocity = Vector3.new(9e9, -9e9, 9e9)
+            root.RotVelocity = Vector3.new(9e9, 9e9, 9e9)
         end
         
         local SFBasePart = function(BasePart)
@@ -2440,7 +2440,7 @@ PlayerTab:Toggle({Title = "Fly", Default = false, Callback = function(v) if v th
 PlayerTab:Slider({Title = "Fly Speed", Step = 5, Value = {Min = 10, Max = 250, Default = 50}, Callback = function(v) FlySpeed = v end})
 
 PerformanceTab:Toggle({
-    Title = "Modo Leve",
+    Title = "More FPS",
     Default = false,
     Callback = function(v)
         LowGraphicsEnabled = v
