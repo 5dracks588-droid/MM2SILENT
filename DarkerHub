@@ -52,11 +52,7 @@ Window:EditOpenButton({
     Icon = "rbxassetid://70820218321157",
     CornerRadius = UDim.new(0.5, 0),
     StrokeThickness = 3, 
-    Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 150, 150)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
-    }),
+    Color = ColorSequence.new(Color3.fromRGB(0, 0, 0)),
     OnlyMobile = false,
     Enabled = true,
     Draggable = true,
@@ -2444,7 +2440,7 @@ PlayerTab:Toggle({Title = "Fly", Default = false, Callback = function(v) if v th
 PlayerTab:Slider({Title = "Fly Speed", Step = 5, Value = {Min = 10, Max = 250, Default = 50}, Callback = function(v) FlySpeed = v end})
 
 PerformanceTab:Toggle({
-    Title = "More FPS",
+    Title = "Modo Leve",
     Default = false,
     Callback = function(v)
         LowGraphicsEnabled = v
@@ -2919,11 +2915,9 @@ local ghostToggle
 
 local function updateGhostButtonUI(state)
     if currentGhostButton and currentGhostButton.Parent then
-        if state then
-            currentGhostButton.Text = "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#00FF00\">on</font>"
-        else
-            currentGhostButton.Text = "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#FF0000\">off</font>"
-        end
+        currentGhostButton.RichText = false
+        currentGhostButton.Text = "GHOST"
+        currentGhostButton.TextSize = 18
     end
 end
 
@@ -3283,6 +3277,15 @@ ghostToggle = PlayerTab:Toggle({
     end
 })
 
+-- Função atualizada para não injetar tags de cor/fonte ao clicar
+local function updateGhostButtonUI(state)
+    if currentGhostButton and currentGhostButton.Parent then
+        currentGhostButton.RichText = false
+        currentGhostButton.Text = "GHOST"
+        currentGhostButton.TextSize = 18
+    end
+end
+
 -- BOTÃO FLUTUANTE NA TELA
 PlayerTab:Toggle({
     Title = "Ghost mode button",
@@ -3304,10 +3307,10 @@ PlayerTab:Toggle({
             GhostButton.Position = UDim2.new(0.5, -35, 0.80, 0)
             GhostButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             GhostButton.BackgroundTransparency = 0.5
-            GhostButton.RichText = true
+            GhostButton.RichText = false
             GhostButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            GhostButton.Text = ghostModeActive and "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#00FF00\">on</font>" or "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#FF0000\">off</font>"
-            GhostButton.TextSize = 14
+            GhostButton.Text = "GHOST"
+            GhostButton.TextSize = 18
             GhostButton.Font = Enum.Font.SourceSans
             GhostButton.Active = true
             GhostButton.Parent = GhostButtonGui
