@@ -520,7 +520,7 @@ local function ToggleThrowButtonGui(enable)
             local runService = game:GetService("RunService")
             local rot = 0
             while ThrowButton.Parent do
-                rot = (rot + 3) % 360
+                rot = (rot + 5) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
@@ -722,7 +722,7 @@ local function ToggleShootButtonGui(enable)
             local runService = game:GetService("RunService")
             local rot = 0
             while ShootButton.Parent do
-                rot = (rot + 3) % 360
+                rot = (rot + 5) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
@@ -2366,7 +2366,7 @@ FarmTab:Dropdown({
 })
 
 FarmTab:Toggle({
-    Title = "Auto force map vote (Vote Spam)",
+    Title = "Auto force map vote",
     Default = false,
     Callback = function(v)
         AutoForceMapVote = v
@@ -2444,7 +2444,7 @@ PlayerTab:Toggle({Title = "Fly", Default = false, Callback = function(v) if v th
 PlayerTab:Slider({Title = "Fly Speed", Step = 5, Value = {Min = 10, Max = 250, Default = 50}, Callback = function(v) FlySpeed = v end})
 
 PerformanceTab:Toggle({
-    Title = "Modo Leve",
+    Title = "More FPS",
     Default = false,
     Callback = function(v)
         LowGraphicsEnabled = v
@@ -2668,7 +2668,7 @@ local function ToggleFpsGui(enable)
         task.spawn(function()
             local rot = 0
             while FpsLabel.Parent do
-                rot = (rot + 3) % 360
+                rot = (rot + 5) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
@@ -2737,7 +2737,7 @@ local function TogglePingGui(enable)
         task.spawn(function()
             local rot = 0
             while PingLabel.Parent do
-                rot = (rot + 3) % 360
+                rot = (rot + 5) % 360
                 if StrokeGradient.Parent then
                     StrokeGradient.Rotation = rot
                 end
@@ -3308,14 +3308,14 @@ PlayerTab:Toggle({
             GhostButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             GhostButton.Text = ghostModeActive and "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#00FF00\">on</font>" or "<font color=\"#FFFFFF\">Ghost</font>\n<font color=\"#FF0000\">off</font>"
             GhostButton.TextSize = 14
-            GhostButton.Font = Enum.Font.SourceSansBold
+            GhostButton.Font = Enum.Font.SourceSans
             GhostButton.Active = true
             GhostButton.Parent = GhostButtonGui
 
             currentGhostButton = GhostButton
 
             local UICorner = Instance.new("UICorner")
-            UICorner.CornerRadius = UDim.new(0, 14)
+            UICorner.CornerRadius = UDim.new(1, 0)
             UICorner.Parent = GhostButton
 
             local UIStroke = Instance.new("UIStroke")
@@ -3335,7 +3335,7 @@ PlayerTab:Toggle({
             task.spawn(function()
                 local rot = 0
                 while GhostButton and GhostButton.Parent do
-                    rot = (rot + 3) % 360
+                    rot = (rot + 5) % 360
                     if StrokeGradient and StrokeGradient.Parent then
                         StrokeGradient.Rotation = rot
                     end
