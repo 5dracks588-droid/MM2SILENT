@@ -2028,7 +2028,7 @@ SheriffTab:Toggle({
 
             local GetGunButton = Instance.new("TextButton")
             GetGunButton.Name = "GetGunButton"
-            GetGunButton.Size = UDim2.new(0, 70, 0, 70)
+            GetGunButton.Size = UDim2.new(0, 50, 0, 50)
             -- Posicionado à direita do centro na parte inferior
             GetGunButton.Position = UDim2.new(0.5, 45, 0.75, 0)
             GetGunButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -3435,7 +3435,7 @@ PlayerTab:Toggle({
 
             local GhostButton = Instance.new("TextButton")
             GhostButton.Name = "GhostButton"
-            GhostButton.Size = UDim2.new(0, 70, 0, 70)
+            GhostButton.Size = UDim2.new(0, 50, 0, 50)
             GhostButton.Position = UDim2.new(0.5, -35, 0.80, 0)
             GhostButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             GhostButton.BackgroundTransparency = 0.5
