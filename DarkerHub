@@ -1430,8 +1430,8 @@ local function UpdateESP()
                     highlight.Parent = char
                 end
 
-                -- Cor padrão para Inocentes / Mortos / Não participantes: Verde
-                local color = Color3.fromRGB(0, 255, 0) 
+                -- Cor do preenchimento baseada na função (Role)
+                local color = Color3.fromRGB(0, 255, 0) -- Verde (Inocente)
 
                 if IsParticipatingAndAlive(p) then
                     local role = GetPlayerRole(p)
@@ -1443,9 +1443,11 @@ local function UpdateESP()
                 end
 
                 highlight.FillColor = color
-                highlight.OutlineColor = color
-                highlight.FillTransparency = 0.5    -- Transparência do meio (preenchimento)
-                highlight.OutlineTransparency = 1 -- Transparência da borda (contorno)
+                highlight.FillTransparency = 0.5
+                
+                -- Borda branca e totalmente visível (transparência 0)
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.OutlineTransparency = 0
             else
                 if highlight then highlight:Destroy() end
             end
@@ -2036,7 +2038,7 @@ SheriffTab:Toggle({
             GetGunButton.RichText = false
             GetGunButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             GetGunButton.Text = "GET GUN"
-            GetGunButton.TextSize = 18
+            GetGunButton.TextSize = 15
             GetGunButton.Font = Enum.Font.SourceSans
             GetGunButton.Active = true
             GetGunButton.Parent = GetGunButtonGui
@@ -3442,7 +3444,7 @@ PlayerTab:Toggle({
             GhostButton.RichText = false
             GhostButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             GhostButton.Text = "GHOST"
-            GhostButton.TextSize = 18
+            GhostButton.TextSize = 15
             GhostButton.Font = Enum.Font.SourceSans
             GhostButton.Active = true
             GhostButton.Parent = GhostButtonGui
