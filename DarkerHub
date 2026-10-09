@@ -3,7 +3,7 @@ local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footag
 --// Window
 local Window = WindUI:CreateWindow({
     Title = "Murder Mystery 2",
-    Icon = "rbxassetid://70820218321157",
+    Icon = "crown",
     Author = "赤 👻", 
     Folder = "MM2WindUI",
     Size = UDim2.fromOffset(580,430),
@@ -33,7 +33,7 @@ pcall(function()
         bgImage.Name = "MenuWallpaper"
         bgImage.Size = UDim2.fromScale(1, 1)
         bgImage.Position = UDim2.fromScale(0, 0)
-        bgImage.Image = "rbxassetid://93907109545937" 
+        bgImage.Image = "rbxassetid://77258325022756" 
         bgImage.BackgroundTransparency = 1
         bgImage.ImageTransparency = 0 -- Deixa a imagem com leve transparência para os textos ficarem legíveis
         bgImage.ScaleType = Enum.ScaleType.Crop
@@ -49,7 +49,7 @@ end)
 
 Window:EditOpenButton({
     Title = "Open Menu",
-    Icon = "rbxassetid://70820218321157",
+    Icon = "crown",
     CornerRadius = UDim.new(0.5, 0),
     StrokeThickness = 3, 
     Color = ColorSequence.new(Color3.fromRGB(0, 0, 0)),
@@ -162,7 +162,7 @@ WindUI:AddTheme({
     Outline = Color3.fromRGB(255, 255, 255),    -- #FFFFFF
     Text = Color3.fromRGB(255, 255, 255),       -- #FFFFFF
     Placeholder = Color3.fromRGB(122, 122, 122),-- #7a7a7a
-    Button = Color3.fromRGB(140, 0, 0),        -- #52525b
+    Button = Color3.fromRGB(140, 140, 140),        -- #52525b
     Icon = Color3.fromRGB(161, 161, 170)        -- #a1a1aa
 })
 
