@@ -33,7 +33,7 @@ pcall(function()
         bgImage.Name = "MenuWallpaper"
         bgImage.Size = UDim2.fromScale(1, 1)
         bgImage.Position = UDim2.fromScale(0, 0)
-        bgImage.Image = "rbxassetid://77258325022756" 
+        bgImage.Image = "rbxassetid://126877520809679" 
         bgImage.BackgroundTransparency = 1
         bgImage.ImageTransparency = 0 -- Deixa a imagem com leve transparência para os textos ficarem legíveis
         bgImage.ScaleType = Enum.ScaleType.Crop
