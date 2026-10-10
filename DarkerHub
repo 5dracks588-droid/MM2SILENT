@@ -52,10 +52,13 @@ Window:EditOpenButton({
     Icon = "rbxassetid://136317579102886",
     CornerRadius = UDim.new(0.5, 0),
     StrokeThickness = 3, 
-    Color = ColorSequence.new(Color3.fromRGB(0, 0, 0)),
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 0, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
+    }),
     OnlyMobile = false,
     Enabled = true,
-    Draggable = false,
+    Draggable = true,
 })
 
 -- Serviços
