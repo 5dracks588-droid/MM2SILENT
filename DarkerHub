@@ -1815,7 +1815,7 @@ RunService.RenderStepped:Connect(function()
             end
             highlight.FillColor = Color3.fromRGB(255, 255, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
-            highlight.FillTransparency = 0.5
+            highlight.FillTransparency = 0.3
             highlight.OutlineTransparency = 0
 
             local gui = gun:FindFirstChild("GunGui")
@@ -2456,7 +2456,7 @@ FarmTab:Button({
 })
 
 ---------------------------------------------------------------------------
--- [ AUTO FORCE MAP VOTE (COM FILTRO EXATO DE DISTÂNCIA DA ARENA >= 500) ]
+-- [ AUTO FORCE MAP VOTE (COM DESATIVAÇÃO AUTOMÁTICA AO CARREGAR O MAPA) ]
 ---------------------------------------------------------------------------
 local SelectedMapVote = "1"
 local AutoForceMapVote = false
@@ -2476,7 +2476,8 @@ FarmTab:Dropdown({
     end
 })
 
-FarmTab:Toggle({
+local mapVoteToggle
+mapVoteToggle = FarmTab:Toggle({
     Title = "Auto force map vote",
     Default = false,
     Callback = function(v)
@@ -2527,9 +2528,17 @@ FarmTab:Toggle({
                         end
                     end
 
-                    -- Se o mapa da arena REALMENTE carregou, pausa o voto automático
+                    -- Se o mapa da arena APARECEU, desativa a função no menu e encerra o loop
                     if mapSpawnsExist then
-                        continue
+                        AutoForceMapVote = false
+                        if mapVoteToggle then
+                            if typeof(mapVoteToggle.SetValue) == "function" then
+                                mapVoteToggle:SetValue(false)
+                            elseif typeof(mapVoteToggle.Set) == "function" then
+                                mapVoteToggle:Set(false)
+                            end
+                        end
+                        break
                     end
 
                     -- 2. Verifica se as plataformas de votação estão presentes no Lobby
@@ -2542,7 +2551,7 @@ FarmTab:Toggle({
                     end
 
                     -- Executa a votação apenas se estiver na fase de voto do lobby e sem mapa de jogo ativo
-                    if mapVoteSpawned then
+                    if mapVoteSpawned and AutoForceMapVote then
                         local char = LocalPlayer.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2682,145 +2691,19 @@ EspTab:Toggle({
 })
 
 ---------------------------------------------------------------------------
--- [ TOGGLE INTEGRADO: FAKE BOMB / BOMB JUMP (NOS PÉS) ]
+-- [ TOGGLE INTEGRADO: FAKE BOMB / BOMB JUMP (VIA TOOL ACTIVATED) ]
 ---------------------------------------------------------------------------
-local fakeBombGui = nil
-local bombBtnPos = UDim2.new(0.75, 0, 0.35, 0)
-local bombDragActive = false
 local charAddedConn = nil
 
 EspTab:Toggle({
-    Title = "Fake Bomb Button",
+    Title = "Fake bomb jump",
     Default = false,
     Callback = function(v)
         if v then
-            -- 1. Entrega o item "Fake bomb" na mochila se não tiver
-            local function EntregarItem()
-                pcall(function()
-                    local backpack = LocalPlayer:FindFirstChild("Backpack")
-                    local character = LocalPlayer.Character
-                    local existing = (character and character:FindFirstChild("Fake bomb")) or (backpack and backpack:FindFirstChild("Fake bomb"))
-
-                    if not existing and backpack then
-                        local tool = Instance.new("Tool")
-                        tool.Name = "Fake bomb"
-                        tool.RequiresHandle = true
-                        tool.CanBeDropped = false
-
-                        local handle = Instance.new("Part")
-                        handle.Name = "Handle"
-                        handle.Size = Vector3.new(2, 1, 1.5)
-                        handle.Color = Color3.fromRGB(140, 0, 0)
-                        handle.Material = Enum.Material.SmoothPlastic
-                        handle.Parent = tool
-
-                        tool.Parent = backpack
-                    end
-                end)
-            end
-
-            EntregarItem()
-
-            -- Garante que o item seja mantido após o respawn
-            if charAddedConn then charAddedConn:Disconnect() end
-            charAddedConn = LocalPlayer.CharacterAdded:Connect(function()
-                task.wait(1)
-                EntregarItem()
-            end)
-
-            -- 2. Cria o Botão na tela
-            if fakeBombGui then fakeBombGui:Destroy() end
-
-            local ScreenGui = Instance.new("ScreenGui")
-            ScreenGui.Name = "BombJumpUI"
-            ScreenGui.ResetOnSpawn = false
-            ScreenGui.DisplayOrder = 10
-            ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-            local BombButton = Instance.new("TextButton")
-            BombButton.Name = "BombJumpButton"
-            BombButton.Size = UDim2.new(0, 80, 0, 80)
-            BombButton.Position = bombBtnPos
-            BombButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            BombButton.BackgroundTransparency = 0.5
-            BombButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            BombButton.Text = "Bomb jump"
-            BombButton.TextSize = 15
-            BombButton.Font = Enum.Font.SourceSansBold
-            BombButton.Active = true
-            BombButton.Parent = ScreenGui
-
-            local UICorner = Instance.new("UICorner")
-            UICorner.CornerRadius = UDim.new(1, 0)
-            UICorner.Parent = BombButton
-
-            local UIStroke = Instance.new("UIStroke")
-            UIStroke.Thickness = 3
-            UIStroke.Color = Color3.fromRGB(255, 255, 255)
-            UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-            UIStroke.Parent = BombButton
-
-            local StrokeGradient = Instance.new("UIGradient")
-            StrokeGradient.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(140, 0, 0)),
-                ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
-            })
-            StrokeGradient.Parent = UIStroke
-
-            task.spawn(function()
-                local rot = 0
-                while BombButton and BombButton.Parent do
-                    rot = (rot + 5) % 360
-                    if StrokeGradient and StrokeGradient.Parent then
-                        StrokeGradient.Rotation = rot
-                    end
-                    RunService.Heartbeat:Wait()
-                end
-            end)
-
-            -- Sistema de arrastar o botão
-            local draggingPos = false
-            local dragStartMouse = Vector2.zero
-            local dragStartPos = UDim2.new()
-
-            BombButton.InputBegan:Connect(function(input)
-                if bombDragActive and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-                    draggingPos = true
-                    dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
-                    dragStartPos = BombButton.Position
-                    
-                    local conn, endConn
-                    conn = UserInputService.InputChanged:Connect(function(moveInput)
-                        if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingPos then
-                            local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - dragStartMouse
-                            bombBtnPos = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
-                            BombButton.Position = bombBtnPos
-                        end
-                    end)
-                    
-                    endConn = UserInputService.InputEnded:Connect(function(endInput)
-                        if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
-                            draggingPos = false
-                            if conn then conn:Disconnect() end
-                            if endConn then endConn:Disconnect() end
-                        end
-                    end)
-                end
-            end)
-
-            -- 3. Função de Spawn nos pés ao clicar no botão flutuante
+            -- Função para criar a parte física nos pés
             local function SpawnarBombaFisica()
-                if bombDragActive then return end
                 local character = LocalPlayer.Character
                 if not character then return end
-
-                -- Exige que a bomba esteja equipada na mão
-                local equippedTool = character:FindFirstChildOfClass("Tool")
-                if not equippedTool or equippedTool.Name ~= "Fake bomb" then
-                    return 
-                end
 
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
@@ -2854,24 +2737,50 @@ EspTab:Toggle({
                 end)
             end
 
-            BombButton.Activated:Connect(function()
-                SpawnarBombaFisica()
-            end)
+            -- Entrega o item "Fake bomb" e vincula o clique da tela ao Activated
+            local function EntregarItem()
+                pcall(function()
+                    local backpack = LocalPlayer:FindFirstChild("Backpack")
+                    local character = LocalPlayer.Character
+                    local existing = (character and character:FindFirstChild("Fake bomb")) or (backpack and backpack:FindFirstChild("Fake bomb"))
 
-            fakeBombGui = ScreenGui
-        else
-            -- 4. Ao desativar o toggle: limpa tudo e reseta a posição
-            if fakeBombGui then
-                fakeBombGui:Destroy()
-                fakeBombGui = nil
+                    if not existing and backpack then
+                        local tool = Instance.new("Tool")
+                        tool.Name = "Fake bomb"
+                        tool.RequiresHandle = true
+                        tool.CanBeDropped = false
+
+                        local handle = Instance.new("Part")
+                        handle.Name = "Handle"
+                        handle.Size = Vector3.new(2, 1, 1.5)
+                        handle.Color = Color3.fromRGB(140, 0, 0)
+                        handle.Material = Enum.Material.SmoothPlastic
+                        handle.Parent = tool
+
+                        -- Conecta a ação diretamente ao uso da ferramenta (clique do mouse ou toque)
+                        tool.Activated:Connect(function()
+                            SpawnarBombaFisica()
+                        end)
+
+                        tool.Parent = backpack
+                    end
+                end)
             end
 
+            EntregarItem()
+
+            -- Mantém o item ativo após o respawn do personagem
+            if charAddedConn then charAddedConn:Disconnect() end
+            charAddedConn = LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1)
+                EntregarItem()
+            end)
+        else
+            -- Limpa as conexões e remove o item da mochila/personagem
             if charAddedConn then
                 charAddedConn:Disconnect()
                 charAddedConn = nil
             end
-
-            bombBtnPos = UDim2.new(0.75, 0, 0.35, 0)
 
             pcall(function()
                 local backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -2888,14 +2797,6 @@ EspTab:Toggle({
                 end
             end)
         end
-    end
-})
-
-EspTab:Toggle({
-    Title = "Drag bomb button",
-    Default = false,
-    Callback = function(v)
-        bombDragActive = v
     end
 })
 
