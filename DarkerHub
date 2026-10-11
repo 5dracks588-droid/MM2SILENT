@@ -2642,88 +2642,221 @@ EspTab:Toggle({
     end
 })
 
-local XRayEnabled = false
-local PropriedadesOriginais = {}
+---------------------------------------------------------------------------
+-- [ TOGGLE INTEGRADO: FAKE BOMB / BOMB JUMP (NOS PÉS) ]
+---------------------------------------------------------------------------
+local fakeBombGui = nil
+local bombBtnPos = UDim2.new(0.75, 0, 0.35, 0)
+local bombDragActive = false
+local charAddedConn = nil
 
 EspTab:Toggle({
-    Title = "X-Ray",
+    Title = "Fake Bomb Button",
     Default = false,
-    Callback = function(Value)
-        XRayEnabled = Value
-        
-        if XRayEnabled then
-            task.spawn(function()
-                while XRayEnabled do
-                    local char = game.Players.LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    
-                    if hrp then
-                        local myPos = hrp.Position
-                        local count = 0
-                        
-                        for _, obj in ipairs(workspace:GetDescendants()) do
-                            if not XRayEnabled then break end
-                            
-                            if obj:IsA("BasePart") then
-                                local eDeJogador = false
-                                local atual = obj
-                                while atual and atual ~= workspace do
-                                    if game.Players:GetPlayerFromCharacter(atual) then
-                                        eDeJogador = true
-                                        break
-                                    end
-                                    atual = atual.Parent
-                                end
-                                
-                                if not eDeJogador then
-                                    if PropriedadesOriginais[obj] == nil and obj.Transparency == 0 then
-                                        PropriedadesOriginais[obj] = {
-                                            Transparency = obj.Transparency,
-                                            Material = obj.Material
-                                        }
-                                    end
-                                    
-                                    local props = PropriedadesOriginais[obj]
-                                    if props then
-                                        obj.Material = Enum.Material.SmoothPlastic
-                                        local dist = (obj.Position - myPos).Magnitude
-                                        
-                                        if dist <= 200 then
-                                            obj.Transparency = 0.8
-                                        else
-                                            obj.Transparency = 1
-                                        end
-                                    end
-                                end
-                            end
-                            
-                            count = count + 1
-                            if count % 150 == 0 then
-                                task.wait()
-                            end
-                        end
+    Callback = function(v)
+        if v then
+            -- 1. Entrega o item "Fake bomb" na mochila se não tiver
+            local function EntregarItem()
+                pcall(function()
+                    local backpack = LocalPlayer:FindFirstChild("Backpack")
+                    local character = LocalPlayer.Character
+                    local existing = (character and character:FindFirstChild("Fake bomb")) or (backpack and backpack:FindFirstChild("Fake bomb"))
+
+                    if not existing and backpack then
+                        local tool = Instance.new("Tool")
+                        tool.Name = "Fake bomb"
+                        tool.RequiresHandle = true
+                        tool.CanBeDropped = false
+
+                        local handle = Instance.new("Part")
+                        handle.Name = "Handle"
+                        handle.Size = Vector3.new(2, 1, 1.5)
+                        handle.Color = Color3.fromRGB(140, 0, 0)
+                        handle.Material = Enum.Material.SmoothPlastic
+                        handle.Parent = tool
+
+                        tool.Parent = backpack
                     end
-                    
-                    task.wait(0.2)
+                end)
+            end
+
+            EntregarItem()
+
+            -- Garante que o item seja mantido após o respawn
+            if charAddedConn then charAddedConn:Disconnect() end
+            charAddedConn = LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1)
+                EntregarItem()
+            end)
+
+            -- 2. Cria o Botão na tela
+            if fakeBombGui then fakeBombGui:Destroy() end
+
+            local ScreenGui = Instance.new("ScreenGui")
+            ScreenGui.Name = "BombJumpUI"
+            ScreenGui.ResetOnSpawn = false
+            ScreenGui.DisplayOrder = 10
+            ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+            local BombButton = Instance.new("TextButton")
+            BombButton.Name = "BombJumpButton"
+            BombButton.Size = UDim2.new(0, 80, 0, 80)
+            BombButton.Position = bombBtnPos
+            BombButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            BombButton.BackgroundTransparency = 0.5
+            BombButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            BombButton.Text = "Bomb jump"
+            BombButton.TextSize = 15
+            BombButton.Font = Enum.Font.SourceSansBold
+            BombButton.Active = true
+            BombButton.Parent = ScreenGui
+
+            local UICorner = Instance.new("UICorner")
+            UICorner.CornerRadius = UDim.new(1, 0)
+            UICorner.Parent = BombButton
+
+            local UIStroke = Instance.new("UIStroke")
+            UIStroke.Thickness = 3
+            UIStroke.Color = Color3.fromRGB(255, 255, 255)
+            UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            UIStroke.Parent = BombButton
+
+            local StrokeGradient = Instance.new("UIGradient")
+            StrokeGradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(140, 0, 0)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
+            })
+            StrokeGradient.Parent = UIStroke
+
+            task.spawn(function()
+                local rot = 0
+                while BombButton and BombButton.Parent do
+                    rot = (rot + 5) % 360
+                    if StrokeGradient and StrokeGradient.Parent then
+                        StrokeGradient.Rotation = rot
+                    end
+                    RunService.Heartbeat:Wait()
                 end
             end)
-        else
-            task.spawn(function()
-                local count = 0
-                for obj, props in pairs(PropriedadesOriginais) do
-                    if obj and obj.Parent then
-                        obj.Transparency = props.Transparency
-                        obj.Material = props.Material
-                    end
+
+            -- Sistema de arrastar o botão
+            local draggingPos = false
+            local dragStartMouse = Vector2.zero
+            local dragStartPos = UDim2.new()
+
+            BombButton.InputBegan:Connect(function(input)
+                if bombDragActive and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                    draggingPos = true
+                    dragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+                    dragStartPos = BombButton.Position
                     
-                    count = count + 1
-                    if count % 1000 == 0 then
-                        task.wait()
-                    end
+                    local conn, endConn
+                    conn = UserInputService.InputChanged:Connect(function(moveInput)
+                        if (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) and draggingPos then
+                            local delta = Vector2.new(moveInput.Position.X, moveInput.Position.Y) - dragStartMouse
+                            bombBtnPos = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+                            BombButton.Position = bombBtnPos
+                        end
+                    end)
+                    
+                    endConn = UserInputService.InputEnded:Connect(function(endInput)
+                        if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
+                            draggingPos = false
+                            if conn then conn:Disconnect() end
+                            if endConn then endConn:Disconnect() end
+                        end
+                    end)
                 end
-                PropriedadesOriginais = {}
+            end)
+
+            -- 3. Função de Spawn nos pés ao clicar no botão flutuante
+            local function SpawnarBombaFisica()
+                if bombDragActive then return end
+                local character = LocalPlayer.Character
+                if not character then return end
+
+                -- Exige que a bomba esteja equipada na mão
+                local equippedTool = character:FindFirstChildOfClass("Tool")
+                if not equippedTool or equippedTool.Name ~= "Fake bomb" then
+                    return 
+                end
+
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+
+                local fakeBomb = Instance.new("Part")
+                fakeBomb.Name = "Fake bomb"
+                fakeBomb.Size = Vector3.new(2, 1, 1.5)
+                fakeBomb.Color = Color3.fromRGB(140, 0, 0)
+                fakeBomb.Material = Enum.Material.SmoothPlastic
+
+                -- Spawna logo abaixo dos pés do personagem
+                fakeBomb.CFrame = hrp.CFrame * CFrame.new(0, -4.5, 0)
+                
+                -- Fica 100ms travada para servir de plataforma
+                fakeBomb.Anchored = true
+                fakeBomb.CanCollide = true
+                fakeBomb.Parent = workspace
+
+                -- Destrói após 5 segundos
+                task.delay(5, function()
+                    if fakeBomb and fakeBomb.Parent then
+                        fakeBomb:Destroy()
+                    end
+                end)
+
+                -- Libera a gravidade após 100ms
+                task.delay(0.1, function()
+                    if fakeBomb and fakeBomb.Parent then
+                        fakeBomb.Anchored = false
+                    end
+                end)
+            end
+
+            BombButton.Activated:Connect(function()
+                SpawnarBombaFisica()
+            end)
+
+            fakeBombGui = ScreenGui
+        else
+            -- 4. Ao desativar o toggle: limpa tudo e reseta a posição
+            if fakeBombGui then
+                fakeBombGui:Destroy()
+                fakeBombGui = nil
+            end
+
+            if charAddedConn then
+                charAddedConn:Disconnect()
+                charAddedConn = nil
+            end
+
+            bombBtnPos = UDim2.new(0.75, 0, 0.35, 0)
+
+            pcall(function()
+                local backpack = LocalPlayer:FindFirstChild("Backpack")
+                local character = LocalPlayer.Character
+                
+                if backpack then
+                    local tool = backpack:FindFirstChild("Fake bomb")
+                    if tool then tool:Destroy() end
+                end
+                
+                if character then
+                    local tool = character:FindFirstChild("Fake bomb")
+                    if tool then tool:Destroy() end
+                end
             end)
         end
+    end
+})
+
+EspTab:Toggle({
+    Title = "Drag bomb button",
+    Default = false,
+    Callback = function(v)
+        bombDragActive = v
     end
 })
 
