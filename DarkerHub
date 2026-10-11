@@ -2456,7 +2456,7 @@ FarmTab:Button({
 })
 
 ---------------------------------------------------------------------------
--- [ AUTO FORCE MAP VOTE / VOTE SPAMMER (TIMED) ]
+-- [ AUTO FORCE MAP VOTE (COM FILTRO EXATO DE DISTÂNCIA DA ARENA >= 500) ]
 ---------------------------------------------------------------------------
 local SelectedMapVote = "1"
 local AutoForceMapVote = false
@@ -2484,13 +2484,55 @@ FarmTab:Toggle({
         if AutoForceMapVote then
             task.spawn(function()
                 while AutoForceMapVote do
-                    task.wait(0.01)
+                    task.wait(0.1)
 
-                    -- 1. Verifica se NÃO há partida em andamento
-                    local normalMaps = workspace:FindFirstChild("NormalMaps")
-                    local hasActiveMatch = (normalMaps and #normalMaps:GetChildren() > 0)
+                    local lobbyPos = Vector3.new(14, 504, -12)
+                    local mapSpawnsExist = false
+                    
+                    -- 1. Verifica se existe um mapa de jogo real carregado (distância >= 500 studs do lobby)
+                    for _, obj in ipairs(workspace:GetChildren()) do
+                        if obj:IsA("Model") and obj.Name ~= "Lobby" and obj.Name ~= "LobbyWorkspace" and obj.Name ~= "SafeArea" and not Players:GetPlayerFromCharacter(obj) then
+                            local spawnsFolder = obj:FindFirstChild("Spawns")
+                            if spawnsFolder then
+                                for _, spawnPart in ipairs(spawnsFolder:GetChildren()) do
+                                    if spawnPart:IsA("BasePart") then
+                                        if (spawnPart.Position - lobbyPos).Magnitude >= 500 then
+                                            mapSpawnsExist = true
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        if mapSpawnsExist then break end
+                    end
 
-                    -- 2. Verifica se as plataformas de votação estão no Lobby
+                    if not mapSpawnsExist then
+                        local normalMaps = workspace:FindFirstChild("NormalMaps")
+                        if normalMaps then
+                            for _, map in ipairs(normalMaps:GetChildren()) do
+                                local spawnsFolder = map:FindFirstChild("Spawns")
+                                if spawnsFolder then
+                                    for _, spawnPart in ipairs(spawnsFolder:GetChildren()) do
+                                        if spawnPart:IsA("BasePart") then
+                                            if (spawnPart.Position - lobbyPos).Magnitude >= 500 then
+                                                mapSpawnsExist = true
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                                if mapSpawnsExist then break end
+                            end
+                        end
+                    end
+
+                    -- Se o mapa da arena REALMENTE carregou, pausa o voto automático
+                    if mapSpawnsExist then
+                        continue
+                    end
+
+                    -- 2. Verifica se as plataformas de votação estão presentes no Lobby
                     local mapVoteSpawned = false
                     for _, obj in ipairs(workspace:GetDescendants()) do
                         if obj:IsA("BasePart") and (obj.Position - Vector3.new(13, 507, 50)).Magnitude < 50 then
@@ -2499,8 +2541,8 @@ FarmTab:Toggle({
                         end
                     end
 
-                    -- Executa a votação se estiver na fase de voto
-                    if not hasActiveMatch and mapVoteSpawned then
+                    -- Executa a votação apenas se estiver na fase de voto do lobby e sem mapa de jogo ativo
+                    if mapVoteSpawned then
                         local char = LocalPlayer.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2508,19 +2550,16 @@ FarmTab:Toggle({
                         if hrp and hum and hum.Health > 0 then
                             local targetPos = MapVoteCoords[SelectedMapVote]
                             if targetPos then
-                                -- Teleporta para a plataforma
+                                -- Teleporta para a plataforma de voto
                                 hrp.CFrame = CFrame.new(targetPos)
                                 
-                                -- 1. Fica exatamente 80 milésimos (0.08s) na coordenada para o servidor registrar o toque
                                 task.wait(0.2)
 
-                                -- Reseta o jogador
+                                -- Reseta o personagem
                                 hum.Health = 0
 
-                                -- Aguarda o personagem renascer no servidor
+                                -- Aguarda renascer para o próximo ciclo de voto
                                 LocalPlayer.CharacterAdded:Wait()
-
-                                -- 2. Aguarda exatamente 80 milésimos (0.08s) APÓS renascer para iniciar o próximo ciclo
                                 task.wait()
                             end
                         end
