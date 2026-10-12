@@ -1424,7 +1424,7 @@ local function UpdateESP()
                 end
 
                 highlight.FillColor = color
-                highlight.FillTransparency = 0.5
+                highlight.FillTransparency = 0.3
                 
                 -- Borda branca e totalmente visível (transparência 0)
                 highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -1815,7 +1815,7 @@ RunService.RenderStepped:Connect(function()
             end
             highlight.FillColor = Color3.fromRGB(255, 255, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
-            highlight.FillTransparency = 0.3
+            highlight.FillTransparency = 0.5
             highlight.OutlineTransparency = 0
 
             local gui = gun:FindFirstChild("GunGui")
@@ -3498,7 +3498,7 @@ PlayerTab:Toggle({
             GhostButton.RichText = false
             GhostButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             GhostButton.Text = "GHOST"
-            GhostButton.TextSize = 15
+            GhostButton.TextSize = 18
             GhostButton.Font = Enum.Font.SourceSans
             GhostButton.Active = true
             GhostButton.Parent = GhostButtonGui
