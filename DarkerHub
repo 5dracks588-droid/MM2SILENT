@@ -1428,7 +1428,7 @@ local function UpdateESP()
                 
                 -- Borda com a mesma cor do meio (Inocente, Murderer ou Sheriff)
                 highlight.OutlineColor = color
-                highlight.OutlineTransparency = 0.2
+                highlight.OutlineTransparency = 0
             else
                 if highlight then highlight:Destroy() end
             end
