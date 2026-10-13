@@ -989,11 +989,11 @@ task.spawn(function()
 
         -- 1. Murderer (Vermelho)
         local murdName = murdPlayer and murdPlayer.Name or "-"
-        local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdName .. '</font>'
+        local murdText = '<font color="#8C0000"><b>Murderer:</b> ' .. murdName .. '</font>'
 
         -- 2. Sheriff (Azul)
         local sheriffName = sheriffPlayer and sheriffPlayer.Name or "-"
-        local sheriffText = '<font color="#00B4FF"><b>Sheriff:</b> ' .. sheriffName .. '</font>'
+        local sheriffText = '<font color="#00008C"><b>Sheriff:</b> ' .. sheriffName .. '</font>'
 
         -- Atualiza a interface
         if RoleParagraph then
@@ -1412,14 +1412,14 @@ local function UpdateESP()
                 end
 
                 -- Cor do preenchimento baseada na função (Role)
-                local color = Color3.fromRGB(0, 255, 0) -- Verde (Inocente)
+                local color = Color3.fromRGB(0, 140, 0) -- Verde (Inocente)
 
                 if IsParticipatingAndAlive(p) then
                     local role = GetPlayerRole(p)
                     if role == "Murderer" then
-                        color = Color3.fromRGB(255, 0, 0) -- Vermelho
+                        color = Color3.fromRGB(140, 0, 0) -- Vermelho
                     elseif role == "Sheriff" then
-                        color = Color3.fromRGB(0, 180, 255) -- Azul
+                        color = Color3.fromRGB(0, 0, 140) -- Azul
                     end
                 end
 
@@ -2646,13 +2646,13 @@ RunService.RenderStepped:Connect(function()
                 local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
 
                 if onScreen then
-                    local color = Color3.fromRGB(0, 255, 0)
+                    local color = Color3.fromRGB(0, 140, 0)
                     if IsParticipatingAndAlive(player) then
                         local role = GetPlayerRole(player)
                         if role == "Murderer" then
-                            color = Color3.fromRGB(255, 0, 0)
+                            color = Color3.fromRGB(140, 0, 0)
                         elseif role == "Sheriff" then
-                            color = Color3.fromRGB(0, 180, 255)
+                            color = Color3.fromRGB(0, 0, 140)
                         end
                     end
 
@@ -3019,11 +3019,11 @@ local function ShowFastRole(role)
     textLabel.TextTransparency = 0
 
     if role == "Murderer" then
-        textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        textLabel.TextColor3 = Color3.fromRGB(140, 0, 0)
     elseif role == "Sheriff" then
-        textLabel.TextColor3 = Color3.fromRGB(0, 180, 255)
+        textLabel.TextColor3 = Color3.fromRGB(0, 0, 140)
     else
-        textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        textLabel.TextColor3 = Color3.fromRGB(0, 140, 0)
     end
 
     textLabel.Parent = screenGui
