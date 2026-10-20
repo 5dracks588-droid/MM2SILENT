@@ -1762,7 +1762,7 @@ CombatTab:Toggle({
 })
 
 CombatTab:Toggle({
-    Title = "Mostrar FOV", 
+    Title = "Show FOV", 
     Default = false, 
     Callback = function(v) 
         FovVisible = v 
@@ -1798,7 +1798,7 @@ MurdererTab:Toggle({
 })
 
 MurdererTab:Toggle({
-    Title = "Knife aura", 
+    Title = "Kill all", 
     Default = false, 
     Callback = function(v)
         KillAuraEnabled = v
@@ -1806,7 +1806,7 @@ MurdererTab:Toggle({
 })
 
 MurdererTab:Toggle({
-    Title = "Knife sheriff", 
+    Title = "Kill sheriff", 
     Default = false, 
     Callback = function(v)
         KillAuraSheriffOnly = v
@@ -2258,7 +2258,7 @@ TeleportTab:Button({
 })
 
 FarmTab:Toggle({
-    Title = "Auto collect Coin",
+    Title = "Auto collect Candys",
     Default = false,
     Callback = function(v)
         AutoCoinEnabled = v
