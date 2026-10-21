@@ -1892,25 +1892,22 @@ SheriffTab:Toggle({
     Title = "Get gun button",
     Default = false,
     Callback = function(Value)
+        local parentGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+
+        if parentGui:FindFirstChild("GetGunButtonGui") then
+            parentGui.GetGunButtonGui:Destroy()
+        end
+
         if Value then
-            -- Seleciona o local correto para renderizar a UI sem ser bloqueado
-            local parentGui = (gethui and gethui()) or LocalPlayer:FindFirstChild("PlayerGui") or CoreGui
-
-            if parentGui:FindFirstChild("GetGunButtonGui") then
-                parentGui.GetGunButtonGui:Destroy()
-            end
-
             local GetGunButtonGui = Instance.new("ScreenGui")
             GetGunButtonGui.Name = "GetGunButtonGui"
             GetGunButtonGui.ResetOnSpawn = false
-            GetGunButtonGui.DisplayOrder = 9999
             GetGunButtonGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
             GetGunButtonGui.Parent = parentGui
 
             local GetGunButton = Instance.new("TextButton")
             GetGunButton.Name = "GetGunButton"
             GetGunButton.Size = UDim2.new(0, 50, 0, 50)
-            -- Posicionado à direita do centro na parte inferior
             GetGunButton.Position = UDim2.new(0.5, 45, 0.75, 0)
             GetGunButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             GetGunButton.BackgroundTransparency = 0.5
@@ -2001,11 +1998,6 @@ SheriffTab:Toggle({
                     end
                 end
             end)
-        else
-            local parentGui = LocalPlayer:WaitForChild("PlayerGui")
-            if parentGui:FindFirstChild("GetGunButtonGui") then
-                parentGui.GetGunButtonGui:Destroy()
-            end
         end
     end
 })
