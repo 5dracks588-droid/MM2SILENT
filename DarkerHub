@@ -2002,7 +2002,7 @@ SheriffTab:Toggle({
                 end
             end)
         else
-            local parentGui = (gethui and gethui()) or LocalPlayer:FindFirstChild("PlayerGui") or CoreGui
+            local parentGui = LocalPlayer:WaitForChild("PlayerGui")
             if parentGui:FindFirstChild("GetGunButtonGui") then
                 parentGui.GetGunButtonGui:Destroy()
             end
@@ -3378,14 +3378,16 @@ PlayerTab:Toggle({
     Default = false,
     Callback = function(Value)
         if Value then
-            if CoreGui:FindFirstChild("GhostButtonGui") then
-                CoreGui.GhostButtonGui:Destroy()
+            local parentGui = LocalPlayer:WaitForChild("PlayerGui")
+
+            if parentGui:FindFirstChild("GhostButtonGui") then
+                parentGui.GhostButtonGui:Destroy()
             end
 
             local GhostButtonGui = Instance.new("ScreenGui")
             GhostButtonGui.Name = "GhostButtonGui"
             GhostButtonGui.ResetOnSpawn = false
-            GhostButtonGui.Parent = CoreGui
+            GhostButtonGui.Parent = parentGui
 
             local GhostButton = Instance.new("TextButton")
             GhostButton.Name = "GhostButton"
@@ -3463,8 +3465,9 @@ PlayerTab:Toggle({
             end)
         else
             currentGhostButton = nil
-            if CoreGui:FindFirstChild("GhostButtonGui") then
-                CoreGui.GhostButtonGui:Destroy()
+            local parentGui = LocalPlayer:WaitForChild("PlayerGui")
+            if parentGui:FindFirstChild("GhostButtonGui") then
+                parentGui.GhostButtonGui:Destroy()
             end
         end
     end
