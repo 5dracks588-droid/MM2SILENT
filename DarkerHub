@@ -24,7 +24,6 @@ pcall(function()
     end
     
     if mainFrame then
-        -- Remove imagens antigas para não duplicar se executar o script de novo
         if mainFrame:FindFirstChild("MenuWallpaper") then
             mainFrame.MenuWallpaper:Destroy()
         end
@@ -35,14 +34,13 @@ pcall(function()
         bgImage.Position = UDim2.fromScale(0, 0)
         bgImage.Image = "rbxassetid://127460636748259" 
         bgImage.BackgroundTransparency = 1
-        bgImage.ImageTransparency = 0 -- Deixa a imagem com leve transparência para os textos ficarem legíveis
+        bgImage.ImageTransparency = 0
         bgImage.ScaleType = Enum.ScaleType.Crop
-        bgImage.ZIndex = 1 -- Mantém na camada padrão para carregar visível
+        bgImage.ZIndex = 1
         bgImage.Parent = mainFrame
 
-        -- Corta as pontas quadradas para respeitar a borda do menu
         local uiCorner = Instance.new("UICorner")
-        uiCorner.CornerRadius = UDim.new(0, 15) -- Arredondamento perfeito das bordas
+        uiCorner.CornerRadius = UDim.new(0, 15)
         uiCorner.Parent = bgImage
     end
 end)
@@ -160,21 +158,20 @@ end)
 -- Adiciona o tema com todas as chaves de cor especificadas
 WindUI:AddTheme({
     Name = "My Theme",
-    Accent = Color3.fromRGB(24, 24, 27),        -- #18181b
-    Background = Color3.fromRGB(0, 0, 0),   -- #101010
-    Outline = Color3.fromRGB(255, 255, 255),    -- #FFFFFF
-    Text = Color3.fromRGB(255, 255, 255),       -- #FFFFFF
-    Placeholder = Color3.fromRGB(122, 122, 122),-- #7a7a7a
-    Button = Color3.fromRGB(140, 0, 0),        -- #52525b
-    Icon = Color3.fromRGB(140, 0, 0)        -- #a1a1aa
+    Accent = Color3.fromRGB(24, 24, 27),
+    Background = Color3.fromRGB(0, 0, 0),
+    Outline = Color3.fromRGB(255, 255, 255),
+    Text = Color3.fromRGB(255, 255, 255),
+    Placeholder = Color3.fromRGB(122, 122, 122),
+    Button = Color3.fromRGB(140, 0, 0),
+    Icon = Color3.fromRGB(140, 0, 0)
 })
 
 -- Aplica o tema criado
 WindUI:SetTheme("My Theme")
 
--- TABS
+-- TABS (Aba Combate removida)
 local InfoTab = Window:Tab({Title = "Info", Icon = "house"})
-local CombatTab = Window:Tab({Title = "Combate", Icon = "sword"})
 local MurdererTab = Window:Tab({Title = "Murderer", Icon = "skull"})
 local SheriffTab = Window:Tab({Title = "Sheriff", Icon = "shield"})
 local FlingTab = Window:Tab({Title = "Fling", Icon = "wind"})
@@ -239,7 +236,7 @@ task.spawn(function()
 
             Sheriff = tempSheriff
         end)
-        task.wait(0.2) -- Atualização a cada 0.2 segundos (200ms)
+        task.wait(0.2)
     end
 end)
 
@@ -251,12 +248,9 @@ end
 
 local function GetPlayerRole(player)
     if not player then return "Innocent" end
-    
-    -- Jogadores mortos ou que não estão participando da partida retornam como "Innocent"
     if not IsParticipatingAndAlive(player) then
         return "Innocent"
     end
-    
     if player.Name == Murder then return "Murderer" end
     if player.Name == Sheriff then return "Sheriff" end
     return "Innocent"
@@ -351,7 +345,6 @@ pcall(function()
     setreadonly(mt, true)
 end)
 
--- Função auxiliar para encontrar o jogador vivo mais próximo
 local function GetClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = math.huge
@@ -736,19 +729,15 @@ local function ToggleShootButtonGui(enable)
             end
         end)
 
--- ==========================================================
+-------------------------------------------------------------
 -- SISTEMA DE SHOOT OTIMIZADO PARA PING ALTO (MM2)
--- ==========================================================
-
+-------------------------------------------------------------
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--------------------------------------------------------------
--- DETECÇÃO DO MURDERER
--------------------------------------------------------------
 local murdererAtual = nil
 
 local function AtualizarMurderer()
@@ -795,9 +784,6 @@ task.spawn(function()
     end
 end)
 
--------------------------------------------------------------
--- EXECUÇÃO DO DISPARO COM COMPENSAÇÃO DE PING
--------------------------------------------------------------
 local function ExecutarDisparo()
     local Character = LocalPlayer.Character
     local Backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -829,7 +815,6 @@ local function ExecutarDisparo()
             local originPos = myRoot.Position + Vector3.new(0, 1.5, 0)
             local liveTargetPos = targetPart.Position
             
-            -- Pega o ping atual para calcular a compensação exata
             local ping = 0
             pcall(function()
                 if LocalPlayer.GetNetworkPing then
@@ -848,9 +833,6 @@ local function ExecutarDisparo()
     end
 end
 
--------------------------------------------------------------
--- VÍNCULO COM O BOTÃO SHOOT
--------------------------------------------------------------
 if ShootButton then
     ShootButton.MouseButton1Down:Connect(function()
         if ShootDragActive then return end
@@ -879,28 +861,24 @@ RunService.RenderStepped:Connect(function()
         FPSParagraph:SetDesc(FPS .. " FPS")
         ServerParagraph:SetDesc(#Players:GetPlayers() .. "/" .. Players.MaxPlayers)
         
--- Loop de atualização contínua a cada 0.2s (200 milissegundos)
-task.spawn(function()
-    while true do
-        local murdPlayer = typeof(Murder) == "Instance" and Murder or (Murder and Players:FindFirstChild(tostring(Murder)))
-        local sheriffPlayer = typeof(Sheriff) == "Instance" and Sheriff or (Sheriff and Players:FindFirstChild(tostring(Sheriff)))
+        task.spawn(function()
+            while true do
+                local murdPlayer = typeof(Murder) == "Instance" and Murder or (Murder and Players:FindFirstChild(tostring(Murder)))
+                local sheriffPlayer = typeof(Sheriff) == "Instance" and Sheriff or (Sheriff and Players:FindFirstChild(tostring(Sheriff)))
 
-        -- 1. Murderer (Vermelho)
-        local murdName = murdPlayer and murdPlayer.Name or "-"
-        local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdName .. '</font>'
+                local murdName = murdPlayer and murdPlayer.Name or "-"
+                local murdText = '<font color="#FF0000"><b>Murderer:</b> ' .. murdName .. '</font>'
 
-        -- 2. Sheriff (Azul)
-        local sheriffName = sheriffPlayer and sheriffPlayer.Name or "-"
-        local sheriffText = '<font color="#0000FF"><b>Sheriff:</b> ' .. sheriffName .. '</font>'
+                local sheriffName = sheriffPlayer and sheriffPlayer.Name or "-"
+                local sheriffText = '<font color="#0000FF"><b>Sheriff:</b> ' .. sheriffName .. '</font>'
 
-        -- Atualiza a interface
-        if RoleParagraph then
-            RoleParagraph:SetDesc(murdText .. "\n" .. sheriffText)
-        end
+                if RoleParagraph then
+                    RoleParagraph:SetDesc(murdText .. "\n" .. sheriffText)
+                end
 
-        task.wait(0.2)
-    end
-end)
+                task.wait(0.2)
+            end
+        end)
 
         FPS = 0
         Last = tick()
@@ -982,7 +960,7 @@ RunService.Stepped:Connect(function()
 end)
 
 ---------------------------------------------------------------------------
--- [ AUTO COIN - LÓGICA ORIGINAL CORRIGIDA (POSIÇÃO 0,0,0 E ANTI-BUG RESPAWN) ]
+-- [ AUTO COIN ]
 ---------------------------------------------------------------------------
 local CoinsCache = {}
 local BlacklistedCoins = {}
@@ -993,7 +971,6 @@ local ReevaluateRoute = false
 local coinAddedConnection = nil
 local coinRemovedConnection = nil
 
--- Valida se a moeda existe e não está na blacklist
 local function IsCoinValid(coin)
     return coin 
         and coin.Parent 
@@ -1003,10 +980,9 @@ local function IsCoinValid(coin)
         and not BlacklistedCoins[coin]
 end
 
--- Escaneamento completo do mapa
 local function InitialMapScan()
     table.clear(CoinsCache)
-    table.clear(BlacklistedCoins) -- Limpa a blacklist ao escanear o mapa de novo
+    table.clear(BlacklistedCoins)
     local areaDeBusca = workspace:FindFirstChild("NormalMaps") or workspace:FindFirstChild("Map") or workspace
     for _, obj in ipairs(areaDeBusca:GetDescendants()) do
         if IsCoinValid(obj) then
@@ -1021,7 +997,6 @@ local function InitialMapScan()
     end
 end
 
--- Função para pegar sempre a moeda mais perto
 local function GetNearestCoin(centerPos)
     local nearest = nil
     local minDist = math.huge
@@ -1040,7 +1015,6 @@ local function GetNearestCoin(centerPos)
     return nearest
 end
 
--- Evento: Moeda Sumiu
 if coinRemovedConnection then coinRemovedConnection:Disconnect() end
 coinRemovedConnection = workspace.DescendantRemoving:Connect(function(obj)
     if CoinsCache[obj] then
@@ -1052,7 +1026,6 @@ coinRemovedConnection = workspace.DescendantRemoving:Connect(function(obj)
     end
 end)
 
--- Evento: Nova Moeda Nasceu
 if coinAddedConnection then coinAddedConnection:Disconnect() end
 coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
     if not AutoCoinEnabled then return end
@@ -1071,7 +1044,6 @@ coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
                         local currentDist = (hrp.Position - currentCoinTarget.Position).Magnitude
                         local newDist = (hrp.Position - obj.Position).Magnitude
                         
-                        -- Se nascer uma muito mais perto, recálcula a rota
                         if newDist < currentDist - 2 then
                             ReevaluateRoute = true
                             if currentCoinTween then currentCoinTween:Cancel() end
@@ -1083,14 +1055,12 @@ coinAddedConnection = workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
--- Loop principal super protegido
 task.spawn(function()
     while true do
         task.wait(0.1)
         
         if AutoCoinEnabled and not IsProcessingCoins then
             IsProcessingCoins = true
-            
             InitialMapScan()
             
             local noclipConn = nil
@@ -1101,37 +1071,33 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 local hum = char and char:FindFirstChild("Humanoid")
                 
-                -- Checa se está vivo usando pcall pra evitar erros caso a função falhe
                 local isAlive = true
                 if typeof(IsParticipatingAndAlive) == "function" then
                     pcall(function() isAlive = IsParticipatingAndAlive(LocalPlayer) end)
                 end
                 
-                -- SE ESTIVER MORTO, NO LOBBY, OU RESETOU:
                 if not hrp or not hum or hum.Health <= 0 or not isAlive then
                     if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
                     if bv then bv:Destroy() bv = nil end
                     if noclipConn then noclipConn:Disconnect() noclipConn = nil end
                     task.wait(0.5)
-                    continue -- Fica esperando você renascer pacientemente
+                    continue
                 end
                 
                 ReevaluateRoute = false
                 local alvo = GetNearestCoin(hrp.Position)
                 
-                -- SE ACABARAM AS MOEDAS:
                 if not alvo then
                     if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
                     if bv then bv:Destroy() bv = nil end
                     if noclipConn then noclipConn:Disconnect() noclipConn = nil end
                     
-                    -- Fica escaneando até o novo mapa carregar ou nascer moeda
                     while AutoCoinEnabled do
                         task.wait(1)
                         local currChar = LocalPlayer.Character
                         local currHrp = currChar and currChar:FindFirstChild("HumanoidRootPart")
                         if not currHrp or not currChar:FindFirstChild("Humanoid") or currChar.Humanoid.Health <= 0 then 
-                            break -- Se morrer enquanto espera, sai e volta pro inicio do loop
+                            break 
                         end
                         
                         InitialMapScan() 
@@ -1141,7 +1107,6 @@ task.spawn(function()
                     continue
                 end
                 
-                -- NOCLIP CORRIGIDO (Pega o personagem ATUAL, e não o antigo)
                 if not noclipConn then
                     noclipConn = RunService.Stepped:Connect(function()
                         local cChar = LocalPlayer.Character
@@ -1153,7 +1118,6 @@ task.spawn(function()
                     end)
                 end
                 
-                -- ANTI-GRAVIDADE
                 if not bv or bv.Parent ~= hrp then
                     if bv then bv:Destroy() end
                     bv = Instance.new("BodyVelocity")
@@ -1164,7 +1128,6 @@ task.spawn(function()
                 
                 currentCoinTarget = alvo
                 
-                -- POSIÇÃO EXATA DA MOEDA (Offset zerado como você pediu)
                 local destinoFinal = alvo.Position
                 if alvo.Parent and alvo.Parent:IsA("Model") and alvo.Parent.PrimaryPart then
                     destinoFinal = alvo.Parent.PrimaryPart.Position
@@ -1184,7 +1147,6 @@ task.spawn(function()
                 )
                 currentCoinTween:Play()
                 
-                -- TEMPO LIMITE / ANTI-TRAVAMENTO
                 local tempoLimite = tempoViagem + 1.5 
                 local tempoInicio = tick()
                 local travou = false
@@ -1193,22 +1155,16 @@ task.spawn(function()
                     RunService.Heartbeat:Wait()
                     
                     if not AutoCoinEnabled or ReevaluateRoute then break end
-                    
-                    -- Se alguém pegou a moeda no meio do caminho
                     if not IsCoinValid(alvo) then
                         ReevaluateRoute = true
                         if currentCoinTween then currentCoinTween:Cancel() end
                         break
                     end
-                    
-                    -- Se você morreu no meio do caminho (alguém te matou)
                     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or LocalPlayer.Character.Humanoid.Health <= 0 then
                         ReevaluateRoute = true
                         if currentCoinTween then currentCoinTween:Cancel() end
                         break
                     end
-                    
-                    -- Se o tempo limite estourou (você enroscou em algo impossível de passar)
                     if tick() - tempoInicio > tempoLimite then
                         travou = true
                         ReevaluateRoute = true
@@ -1219,14 +1175,12 @@ task.spawn(function()
                 
                 if not AutoCoinEnabled then continue end
                 
-                -- Se a moeda ficou inalcançável (preso na parede)
                 if travou then
                     BlacklistedCoins[alvo] = true
                     CoinsCache[alvo] = nil
                     continue
                 end
                 
-                -- CHEGOU NA MOEDA (Espera ela coletar de fato)
                 if not ReevaluateRoute and IsCoinValid(alvo) then
                     CoinsCache[alvo] = nil
                     local tempoTotal = (type(TempoNaMoeda) == "number" and TempoNaMoeda > 0) and TempoNaMoeda or 0.2
@@ -1238,14 +1192,12 @@ task.spawn(function()
                 end
             end
             
-            -- Limpeza geral ao desligar o Toggle
             if currentCoinTween then currentCoinTween:Cancel() currentCoinTween = nil end
             if bv then bv:Destroy() bv = nil end
             if noclipConn then noclipConn:Disconnect() noclipConn = nil end
             
             IsProcessingCoins = false
         elseif not AutoCoinEnabled then
-            -- Garante que o script destrave se o Toggle for desligado bruscamente
             IsProcessingCoins = false
         end
     end
@@ -1309,22 +1261,19 @@ local function UpdateESP()
                     highlight.Parent = char
                 end
 
-                -- Cor do preenchimento baseada na função (Role)
-                local color = Color3.fromRGB(0, 255, 0) -- Verde (Inocente)
+                local color = Color3.fromRGB(0, 255, 0)
 
                 if IsParticipatingAndAlive(p) then
                     local role = GetPlayerRole(p)
                     if role == "Murderer" then
-                        color = Color3.fromRGB(255, 0, 0) -- Vermelho
+                        color = Color3.fromRGB(255, 0, 0)
                     elseif role == "Sheriff" then
-                        color = Color3.fromRGB(0, 0, 255) -- Azul
+                        color = Color3.fromRGB(0, 0, 255)
                     end
                 end
 
                 highlight.FillColor = color
                 highlight.FillTransparency = 0.5
-                
-                -- Borda com a mesma cor do meio (Inocente, Murderer ou Sheriff)
                 highlight.OutlineColor = color
                 highlight.OutlineTransparency = 0.2
             else
@@ -1734,7 +1683,7 @@ RunService.RenderStepped:Connect(function()
                 label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
                 label.TextStrokeTransparency = 1
                 label.RichText = true
-                label.Font = Enum.Font.GothamBold -- Corrigido de textLabel.Font para label.Font
+                label.Font = Enum.Font.GothamBold
                 label.Parent = gui
             end
 
@@ -1753,38 +1702,7 @@ end)
 ---------------------------------------------------------------------------
 -- [ TABS E INTERFACES ]
 ---------------------------------------------------------------------------
-CombatTab:Toggle({
-    Title = "Aimbot", 
-    Default = false, 
-    Callback = function(v) 
-        AimbotEnabled = v 
-    end
-})
-
-CombatTab:Toggle({
-    Title = "Show FOV", 
-    Default = false, 
-    Callback = function(v) 
-        FovVisible = v 
-    end
-})
-
-CombatTab:Slider({
-    Title = "FOV", 
-    Step = 5, 
-    Value = {Min = 50, Max = 500, Default = 100},
-    Callback = function(v) 
-        FovSize = v 
-    end
-})
-
-CombatTab:Toggle({
-    Title = "Anti Fling", 
-    Default = false, 
-    Callback = function(v) 
-        AntiFlingEnabled = v 
-    end
-})
+-- (Aba Combate removida)
 
 ---------------------------------------------------------------------------
 -- [ TAB MURDERER ]
@@ -2133,6 +2051,15 @@ FlingTab:Toggle({
     end
 })
 
+-- Anti Fling posicionado logo abaixo do Touch Fling
+FlingTab:Toggle({
+    Title = "Anti Fling", 
+    Default = false, 
+    Callback = function(v) 
+        AntiFlingEnabled = v 
+    end
+})
+
 Players.PlayerRemoving:Connect(function(p)
     if SelectedPlayerToFling == p.Name then SelectedPlayerToFling = "" end
     if SelectedPlayerToTp == p.Name then SelectedPlayerToTp = "" end
@@ -2346,7 +2273,7 @@ FarmTab:Button({
 })
 
 ---------------------------------------------------------------------------
--- [ AUTO FORCE MAP VOTE (COM DESATIVAÇÃO AUTOMÁTICA AO CARREGAR O MAPA) ]
+-- [ AUTO FORCE MAP VOTE ]
 ---------------------------------------------------------------------------
 local SelectedMapVote = "1"
 local AutoForceMapVote = false
@@ -2380,7 +2307,6 @@ mapVoteToggle = FarmTab:Toggle({
                     local lobbyPos = Vector3.new(14, 504, -12)
                     local mapSpawnsExist = false
                     
-                    -- 1. Verifica se existe um mapa de jogo real carregado (distância >= 500 studs do lobby)
                     for _, obj in ipairs(workspace:GetChildren()) do
                         if obj:IsA("Model") and obj.Name ~= "Lobby" and obj.Name ~= "LobbyWorkspace" and obj.Name ~= "SafeArea" and not Players:GetPlayerFromCharacter(obj) then
                             local spawnsFolder = obj:FindFirstChild("Spawns")
@@ -2418,7 +2344,6 @@ mapVoteToggle = FarmTab:Toggle({
                         end
                     end
 
-                    -- Se o mapa da arena APARECEU, desativa a função no menu e encerra o loop
                     if mapSpawnsExist then
                         AutoForceMapVote = false
                         if mapVoteToggle then
@@ -2431,7 +2356,6 @@ mapVoteToggle = FarmTab:Toggle({
                         break
                     end
 
-                    -- 2. Verifica se as plataformas de votação estão presentes no Lobby
                     local mapVoteSpawned = false
                     for _, obj in ipairs(workspace:GetDescendants()) do
                         if obj:IsA("BasePart") and (obj.Position - Vector3.new(13, 507, 50)).Magnitude < 50 then
@@ -2440,7 +2364,6 @@ mapVoteToggle = FarmTab:Toggle({
                         end
                     end
 
-                    -- Executa a votação apenas se estiver na fase de voto do lobby e sem mapa de jogo ativo
                     if mapVoteSpawned and AutoForceMapVote then
                         local char = LocalPlayer.Character
                         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -2449,15 +2372,9 @@ mapVoteToggle = FarmTab:Toggle({
                         if hrp and hum and hum.Health > 0 then
                             local targetPos = MapVoteCoords[SelectedMapVote]
                             if targetPos then
-                                -- Teleporta para a plataforma de voto
                                 hrp.CFrame = CFrame.new(targetPos)
-                                
                                 task.wait(0.2)
-
-                                -- Reseta o personagem
                                 hum.Health = 0
-
-                                -- Aguarda renascer para o próximo ciclo de voto
                                 LocalPlayer.CharacterAdded:Wait()
                                 task.wait()
                             end
@@ -2492,16 +2409,17 @@ PlayerTab:Toggle({Title = "NoClip", Default = false, Callback = function(v) Nocl
 PlayerTab:Toggle({Title = "Fly", Default = false, Callback = function(v) if v then StartFly() else StopFly() end end})
 PlayerTab:Slider({Title = "Fly Speed", Step = 5, Value = {Min = 10, Max = 250, Default = 50}, Callback = function(v) FlySpeed = v end})
 
-PerformanceTab:Toggle({
+-- Botão More FPS atualizado na aba Desempenho
+PerformanceTab:Button({
     Title = "More FPS",
-    Default = false,
-    Callback = function(v)
-        LowGraphicsEnabled = v
-        if v then
-            OptimizeTextures()
-        else
-            RestoreTextures()
-        end
+    Callback = function()
+        LowGraphicsEnabled = true
+        OptimizeTextures()
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            UserSettings():GetService("UserGameSettings").SavedQualityLevel = Enum.QualityLevel.Level01
+        end)
+        print("Modo Plástico Instantâneo ativado!")
     end
 })
 
@@ -2516,7 +2434,6 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- Posição do meio da parte inferior (baixo) da tela
     local bottomScreenPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
 
     for _, player in ipairs(Players:GetPlayers()) do
@@ -2581,7 +2498,7 @@ EspTab:Toggle({
 })
 
 ---------------------------------------------------------------------------
--- [ TOGGLE INTEGRADO: FAKE BOMB / BOMB JUMP (VIA TOOL ACTIVATED) ]
+-- [ TOGGLE INTEGRADO: FAKE BOMB / BOMB JUMP ]
 ---------------------------------------------------------------------------
 local charAddedConn = nil
 
@@ -2590,7 +2507,6 @@ EspTab:Toggle({
     Default = false,
     Callback = function(v)
         if v then
-            -- Função para criar a parte física nos pés
             local function SpawnarBombaFisica()
                 local character = LocalPlayer.Character
                 if not character then return end
@@ -2604,22 +2520,17 @@ EspTab:Toggle({
                 fakeBomb.Color = Color3.fromRGB(140, 0, 0)
                 fakeBomb.Material = Enum.Material.SmoothPlastic
 
-                -- Spawna logo abaixo dos pés do personagem
                 fakeBomb.CFrame = hrp.CFrame * CFrame.new(0, -4.5, 0)
-                
-                -- Fica 100ms travada para servir de plataforma
                 fakeBomb.Anchored = true
                 fakeBomb.CanCollide = true
                 fakeBomb.Parent = workspace
 
-                -- Destrói após 5 segundos
                 task.delay(5, function()
                     if fakeBomb and fakeBomb.Parent then
                         fakeBomb:Destroy()
                     end
                 end)
 
-                -- Libera a gravidade após 100ms
                 task.delay(0.1, function()
                     if fakeBomb and fakeBomb.Parent then
                         fakeBomb.Anchored = false
@@ -2627,7 +2538,6 @@ EspTab:Toggle({
                 end)
             end
 
-            -- Entrega o item "Fake bomb" e vincula o clique da tela ao Activated
             local function EntregarItem()
                 pcall(function()
                     local backpack = LocalPlayer:FindFirstChild("Backpack")
@@ -2647,7 +2557,6 @@ EspTab:Toggle({
                         handle.Material = Enum.Material.SmoothPlastic
                         handle.Parent = tool
 
-                        -- Conecta a ação diretamente ao uso da ferramenta (clique do mouse ou toque)
                         tool.Activated:Connect(function()
                             SpawnarBombaFisica()
                         end)
@@ -2659,14 +2568,12 @@ EspTab:Toggle({
 
             EntregarItem()
 
-            -- Mantém o item ativo após o respawn do personagem
             if charAddedConn then charAddedConn:Disconnect() end
             charAddedConn = LocalPlayer.CharacterAdded:Connect(function()
                 task.wait(1)
                 EntregarItem()
             end)
         else
-            -- Limpa as conexões e remove o item da mochila/personagem
             if charAddedConn then
                 charAddedConn:Disconnect()
                 charAddedConn = nil
@@ -2850,20 +2757,19 @@ PerformanceTab:Toggle({
     end
 })
 
--- ====================================================
--- SYSTEM: FAST ROLE REVEAL (LIMPO SEM TENTAR ESCONDER A UI DO JOGO)
--- ====================================================
+---------------------------------------------------------------------------
+-- [ SYSTEM: FAST ROLE REVEAL ]
+---------------------------------------------------------------------------
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 
 local FastRoleEnabled = false
 local lastMatchState = false
 
--- Executa o som de clique no momento da revelação
 local function PlayRevealSound()
     pcall(function()
         local sound = Instance.new("Sound")
-        sound.SoundId = "rbxassetid://4590662766" -- Som de clique limpo
+        sound.SoundId = "rbxassetid://4590662766"
         sound.Volume = 1
         sound.Parent = SoundService
         sound:Play()
@@ -2873,7 +2779,6 @@ local function PlayRevealSound()
     end)
 end
 
--- Toggle na Tab Info
 InfoTab:Toggle({
     Title = "Fast Role Reveal", 
     Default = false, 
@@ -2882,11 +2787,9 @@ InfoTab:Toggle({
     end
 })
 
--- Função para criar e mostrar o texto personalizado na tela
 local function ShowFastRole(role)
     PlayRevealSound()
 
-    -- Remove a interface anterior se existir
     if LocalPlayer.PlayerGui:FindFirstChild("FastRoleGui") then
         LocalPlayer.PlayerGui.FastRoleGui:Destroy()
     end
@@ -2933,7 +2836,6 @@ local function ShowFastRole(role)
     end)
 end
 
--- Loop de verificação rápida (detecta o início da partida)
 task.spawn(function()
     while task.wait(0.2) do
         if FastRoleEnabled then
@@ -2958,18 +2860,15 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- SERVICES
--- ==========================================
+---------------------------------------------------------------------------
+-- [ SERVICES & GHOST MODE ]
+---------------------------------------------------------------------------
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
--- ==========================================
--- GHOST MODE VARIABLES
--- ==========================================
 local ghostModeActive = false
 local canMoveButton = false
 local ghostCamConn = nil
@@ -2999,9 +2898,6 @@ local function updateGhostButtonUI(state)
     end
 end
 
--- ==========================================
--- GHOST MODE FUNCTIONS
--- ==========================================
 local function prepareGhostClone(model)
     for _, v in pairs(model:GetDescendants()) do
         if v:IsA("Animator") or v:IsA("AnimationController") or v:IsA("Script") or v:IsA("LocalScript") then
@@ -3056,7 +2952,6 @@ local function buildPartPairs(realModel, cloneModel)
     end
 end
 
--- Declaração antecipada da função
 local setGhostState 
 
 local function checkTeleport()
@@ -3076,7 +2971,6 @@ local function checkTeleport()
     local dist = (currentPos - lastKnownSkyPos).Magnitude
 
     if dist > 100 then
-        -- Mantém o Ghost ativado ao ser teleportado pelo servidor (muda de mapa/lobby)
         isUpdatingGhostCFrame = true
         local newGroundPos = currentPos
         
@@ -3116,12 +3010,10 @@ local function checkTeleport()
     end
 end
 
--- Função principal de ativação/desativação
 setGhostState = function(state, skipTeleportBack)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
-    -- Limpa conexões antigas
     RunService:UnbindFromRenderStep("GhostSyncVisual")
     if ghostCamConn then ghostCamConn:Disconnect() ghostCamConn = nil end
     if ghostCFrameConn then ghostCFrameConn:Disconnect() ghostCFrameConn = nil end
@@ -3139,7 +3031,6 @@ setGhostState = function(state, skipTeleportBack)
     end
 
     if ghostModeActive then
-        -- Remove foco de morte anterior se existir
         if deathCamPart then
             deathCamPart:Destroy()
             deathCamPart = nil
@@ -3152,10 +3043,8 @@ setGhostState = function(state, skipTeleportBack)
 
         local initialCFrame = hrp.CFrame
 
-        -- DETECÇÃO DE MORTE DO PERSONAGEM REAL
         if humanoid then
             ghostDiedConn = humanoid.Died:Connect(function()
-                -- Cria um ponto invisível onde o clone estava para prender a câmera lá
                 if ghostClone and ghostClone:FindFirstChild("HumanoidRootPart") then
                     local lastCloneCFrame = ghostClone.HumanoidRootPart.CFrame
                     
@@ -3171,7 +3060,6 @@ setGhostState = function(state, skipTeleportBack)
                     workspace.CurrentCamera.CameraSubject = deathCamPart
                 end
                 
-                -- Desativa o Ghost Mode sem puxar o corpo morto de volta
                 setGhostState(false, true)
             end)
         end
@@ -3190,7 +3078,6 @@ setGhostState = function(state, skipTeleportBack)
         
         ghostClone.Parent = workspace
 
-        -- Ancoragem no céu
         hrp.Anchored = true
         hrp.CFrame = initialCFrame + ghostOffset
         lastKnownSkyPos = hrp.Position
@@ -3247,7 +3134,6 @@ setGhostState = function(state, skipTeleportBack)
             end
         end)
     else
-        -- DESTRUIÇÃO DO GHOST
         if ghostClone then ghostClone:Destroy() ghostClone = nil end
         table.clear(partPairs)
 
@@ -3263,7 +3149,6 @@ setGhostState = function(state, skipTeleportBack)
             isUpdatingGhostCFrame = false
             
             local realHumanoid = currentChar:FindFirstChildOfClass("Humanoid")
-            -- Só devolve a câmera para o personagem real SE ELE ESTIVER VIVO
             if realHumanoid and realHumanoid.Health > 0 then
                 workspace.CurrentCamera.CameraSubject = realHumanoid
             end
@@ -3273,7 +3158,6 @@ setGhostState = function(state, skipTeleportBack)
     end
 end
 
--- LIMPEZA DA CÂMERA AO NASCER UM NOVO PERSONAGEM (RESPAWN)
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     if deathCamPart then
         deathCamPart:Destroy()
@@ -3286,9 +3170,6 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
 end)
 
--- ==========================================
--- CONTINUOUS MAP CLONING LOOP (BACKGROUND)
--- ==========================================
 local lastMapTick = 0
 RunService.Heartbeat:Connect(function()
     local now = tick()
@@ -3344,7 +3225,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- TOGGLE PRINCIPAL DO MENU
 ghostToggle = PlayerTab:Toggle({
     Title = "Ghost Mode",
     Default = false,
@@ -3355,16 +3235,6 @@ ghostToggle = PlayerTab:Toggle({
     end
 })
 
--- Função atualizada para não injetar tags de cor/fonte ao clicar
-local function updateGhostButtonUI(state)
-    if currentGhostButton and currentGhostButton.Parent then
-        currentGhostButton.RichText = false
-        currentGhostButton.Text = "GHOST"
-        currentGhostButton.TextSize = 18
-    end
-end
-
--- BOTÃO FLUTUANTE NA TELA
 PlayerTab:Toggle({
     Title = "Ghost mode button",
     Default = false,
