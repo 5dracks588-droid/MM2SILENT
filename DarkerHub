@@ -1928,6 +1928,42 @@ SheriffTab:Toggle({
     end
 })
 
+local RemoveAnimsEnabled = false
+local blockedAnimIds = {
+    ["rbxassetid://134826825394657"] = true,
+    ["rbxassetid://123606547020560"] = true,
+    ["134826825394657"] = true,
+    ["123606547020560"] = true,
+}
+
+RunService.Stepped:Connect(function()
+    if RemoveAnimsEnabled then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local animator = hum and hum:FindFirstChildOfClass("Animator")
+            if animator then
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    if track.Animation then
+                        local id = track.Animation.AnimationId
+                        if blockedAnimIds[id] then
+                            track:Stop(0)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+SheriffTab:Toggle({
+    Title = "No shoot animation",
+    Default = false,
+    Callback = function(v)
+        RemoveAnimsEnabled = v
+    end
+})
+
 SheriffTab:Toggle({
     Title = "Resize Button", 
     Default = false, 
