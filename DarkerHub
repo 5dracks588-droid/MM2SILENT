@@ -2213,7 +2213,7 @@ TeleportTab:Button({
 })
 
 FarmTab:Toggle({
-    Title = "Auto collect Candys",
+    Title = "Auto collect Coins",
     Default = false,
     Callback = function(v)
         AutoCoinEnabled = v
@@ -2315,9 +2315,9 @@ local SelectedMapVote = "1"
 local AutoForceMapVote = false
 
 local MapVoteCoords = {
-    ["1"] = Vector3.new(616, 466, 28),
-    ["2"] = Vector3.new(618, 466, 37),
-    ["3"] = Vector3.new(616, 466, 47)
+    ["1"] = Vector3.new(26, 507, 50),
+    ["2"] = Vector3.new(14, 507, 52),
+    ["3"] = Vector3.new(2, 507, 50)
 }
 
 FarmTab:Dropdown({
