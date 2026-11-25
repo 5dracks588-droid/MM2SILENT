@@ -2149,7 +2149,7 @@ TeleportTab:Button({Title = "TP Safe zone", Callback = function() TeleportToSafe
 TeleportTab:Button({
     Title = "TP Lobby",
     Callback = function()
-        TeleportToCFrame(CFrame.new(559, 461, 37))
+        TeleportToCFrame(CFrame.new(14, 505, -13))
     end
 })
 
